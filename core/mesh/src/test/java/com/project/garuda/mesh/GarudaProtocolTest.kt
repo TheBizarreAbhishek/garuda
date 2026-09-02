@@ -15,8 +15,9 @@ class GarudaProtocolTest {
         val sosPacket = GarudaPacket(
             packetType = GarudaPacket.TYPE_SOS,
             packetId = 0x12345678,
-            deviceHash = 0xABCDEF01,
+            deviceHash = 0xABCDEF01.toInt(),
             timestamp = 1700000000,
+
             latitude = 28.613939,
             longitude = 77.209021,
             emergencyType = GarudaPacket.EMERGENCY_MEDICAL,
@@ -31,8 +32,9 @@ class GarudaProtocolTest {
         assertNotNull(decodedPacket)
         assertEquals(GarudaPacket.TYPE_SOS, decodedPacket!!.packetType)
         assertEquals(0x12345678, decodedPacket.packetId)
-        assertEquals(0xABCDEF01, decodedPacket.deviceHash)
+        assertEquals(0xABCDEF01.toInt(), decodedPacket.deviceHash)
         assertEquals(1700000000, decodedPacket.timestamp)
+
         assertEquals(28.613939, decodedPacket.latitude, 1e-6)
         assertEquals(77.209021, decodedPacket.longitude, 1e-6)
         assertEquals(GarudaPacket.EMERGENCY_MEDICAL, decodedPacket.emergencyType)
