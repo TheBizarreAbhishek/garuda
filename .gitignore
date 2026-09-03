@@ -1,10 +1,14 @@
 *.iml
+.gradle/
 .gradle
 /local.properties
 local.properties
 .idea/
+.idea
 .DS_Store
+/build/
 /build
+build/
 app/build/
 core/*/build/
 feature/*/build/
@@ -16,3 +20,7 @@ feature/*/build/
 garuda-macos/.build/
 *.xcodeproj
 *.xcworkspace
+.kotlin/
+.kotlin
+*.log
+*.tmp

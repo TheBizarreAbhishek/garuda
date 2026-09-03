@@ -128,9 +128,9 @@ struct MapMetricsOverlay: View {
         }
         .padding(10)
         .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
-        .shadow(color: .black.opacity(0.2), radius: 8)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
     }
 }
 
@@ -160,11 +160,11 @@ struct SignalDetailOverlayCard: View {
     @ObservedObject var store: CommandCenterStore
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(signal.victimName)
-                        .font(.headline)
+                        .font(.headline.bold())
                     Text(signal.emergencyType.rawValue)
                         .font(.subheadline)
                         .foregroundColor(.red)
@@ -174,6 +174,7 @@ struct SignalDetailOverlayCard: View {
                     store.selectedSignal = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -181,7 +182,7 @@ struct SignalDetailOverlayCard: View {
             
             Divider()
             
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                 GridRow {
                     Text("Blood Group:").foregroundColor(.secondary).font(.caption)
                     Text(signal.bloodGroup).font(.caption.bold())
@@ -203,38 +204,44 @@ struct SignalDetailOverlayCard: View {
             if !signal.notes.isEmpty {
                 Text(signal.notes)
                     .font(.caption)
-                    .padding(8)
+                    .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(6)
+                    .background(Color.secondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             
             // Dispatch Actions
             HStack(spacing: 8) {
-                Button("Dispatch NDRF") {
+                Button {
                     store.updateSignalStatus(
                         id: signal.id,
                         newStatus: .dispatched,
                         assignedUnit: "NDRF Quick Response Team"
                     )
+                } label: {
+                    Text("Dispatch NDRF")
+                        .font(.system(size: 11, weight: .bold))
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
                 .controlSize(.small)
                 
-                Button("Mark Safe") {
+                Button {
                     store.updateSignalStatus(id: signal.id, newStatus: .rescued)
+                } label: {
+                    Text("Mark Safe")
+                        .font(.system(size: 11, weight: .bold))
                 }
                 .buttonStyle(.bordered)
                 .tint(.green)
                 .controlSize(.small)
             }
         }
-        .padding(14)
-        .frame(width: 280)
+        .padding(16)
+        .frame(width: 300)
         .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .shadow(radius: 10)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
     }
 }

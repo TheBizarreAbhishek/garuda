@@ -42,7 +42,7 @@ class CitizenViewModel(
     private var meshRelayEngine: MeshRelayEngine? = null
 
     // Cloud Firebase Gateway
-    val firebaseGateway = FirebaseCloudGateway(viewModelScope)
+    val firebaseGateway = FirebaseCloudGateway(viewModelScope, appContext)
 
     init {
         initBleMeshEngine()
@@ -244,13 +244,17 @@ class CitizenViewModel(
         }
 
         val deviceHashInt = (Build.MODEL ?: "GarudaCitizen").hashCode()
+        val loc = firebaseGateway.hardwareManager?.locationFlow?.value
+        val realLat = if (loc != null && loc.hasValidLocation && loc.latitude != 0.0) loc.latitude else 12.9716
+        val realLon = if (loc != null && loc.hasValidLocation && loc.longitude != 0.0) loc.longitude else 77.5946
+
         val garudaPacket = GarudaPacket(
             packetType = GarudaPacket.TYPE_SOS,
             packetId = packetIdInt,
             deviceHash = deviceHashInt,
             timestamp = nowEpoch,
-            latitude = 12.9716,
-            longitude = 77.5946,
+            latitude = realLat,
+            longitude = realLon,
             emergencyType = protocolEmergencyCode,
             hopCount = 0,
             ttl = GarudaPacket.DEFAULT_TTL

@@ -71,8 +71,10 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                     let devName = (fields["deviceName"] as? [String: Any])?["stringValue"] as? String ?? docId
                     let status = (fields["status"] as? [String: Any])?["stringValue"] as? String ?? "ONLINE"
                     let role = (fields["meshRole"] as? [String: Any])?["stringValue"] as? String ?? "Relay Node"
-                    let battery = Int((fields["batteryLevel"] as? [String: Any])?["integerValue"] as? String ?? "88") ?? 88
-                    let loc = (fields["location"] as? [String: Any])?["stringValue"] as? String ?? "Disaster Zone"
+                    let battery = Int((fields["batteryLevel"] as? [String: Any])?["integerValue"] as? String ?? "80") ?? 80
+                    let loc = (fields["location"] as? [String: Any])?["stringValue"] as? String ?? "GPS Locating..."
+                    let lat = (fields["latitude"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0
+                    let lon = (fields["longitude"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0
                     
                     let dev = ConnectedDevice(
                         id: docId,
@@ -81,6 +83,8 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                         status: status,
                         meshRole: role,
                         location: loc,
+                        latitude: lat,
+                        longitude: lon,
                         lastSeen: Date(),
                         isOnline: true
                     )

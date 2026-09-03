@@ -186,16 +186,27 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
     public var status: String
     public var meshRole: String
     public var location: String
+    public var latitude: Double
+    public var longitude: Double
     public var lastSeen: Date
     public var isOnline: Bool
+    
+    public var coordinate: CLLocationCoordinate2D? {
+        if latitude != 0.0 && longitude != 0.0 {
+            return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+        return nil
+    }
     
     public init(
         id: String,
         name: String,
-        batteryLevel: Int = 88,
+        batteryLevel: Int = 100,
         status: String = "ONLINE",
         meshRole: String = "Relay Gateway Node",
-        location: String = "Wayanad / Kerala",
+        location: String = "Detecting GPS...",
+        latitude: Double = 0.0,
+        longitude: Double = 0.0,
         lastSeen: Date = Date(),
         isOnline: Bool = true
     ) {
@@ -205,6 +216,8 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
         self.status = status
         self.meshRole = meshRole
         self.location = location
+        self.latitude = latitude
+        self.longitude = longitude
         self.lastSeen = lastSeen
         self.isOnline = isOnline
     }

@@ -1,7 +1,9 @@
 package com.project.garuda.network
 
+import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.project.garuda.hardware.DeviceHardwareManager
 import com.project.garuda.mesh.protocol.GarudaPacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +34,8 @@ data class FirebaseSyncState(
 )
 
 class FirebaseCloudGateway(
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val context: Context? = null
 ) {
     companion object {
         private const val TAG = "GarudaFirebase"
@@ -44,7 +47,13 @@ class FirebaseCloudGateway(
     val syncState: StateFlow<FirebaseSyncState> = _syncState.asStateFlow()
 
     private var pollJob: Job? = null
-    private val deviceId = (Build.MODEL ?: "GalaxyDevice").replace(" ", "_") + "_" + (Build.SERIAL.takeIf { it != "unknown" } ?: "NODE01")
+    val hardwareManager = context?.let { DeviceHardwareManager(it) }
+
+    private val deviceId: String = {
+        val model = (Build.MODEL ?: "GalaxyDevice").replace(" ", "_")
+        val manufacturer = (Build.MANUFACTURER ?: "Samsung").replace(" ", "_")
+        "${manufacturer}_${model}_NODE"
+    }()
 
     init {
         startCloudListener()
@@ -79,15 +88,25 @@ class FirebaseCloudGateway(
                 doOutput = true
             }
 
-            val deviceName = "Samsung " + (Build.MODEL ?: "Galaxy Device")
+            // Real Hardware Values
+            val realBattery = hardwareManager?.getRealBatteryPercentage() ?: 80
+            val locationData = hardwareManager?.locationFlow?.value
+            val realLat = locationData?.latitude ?: 0.0
+            val realLon = locationData?.longitude ?: 0.0
+            val realLocationName = locationData?.locationName ?: "GPS Locating..."
+
+            val deviceName = (Build.MANUFACTURER ?: "Samsung") + " " + (Build.MODEL ?: "Galaxy Device")
+
             val fields = JSONObject().apply {
                 put("deviceId", JSONObject().put("stringValue", deviceId))
                 put("deviceName", JSONObject().put("stringValue", deviceName))
                 put("status", JSONObject().put("stringValue", "ONLINE"))
-                put("batteryLevel", JSONObject().put("integerValue", "88"))
+                put("batteryLevel", JSONObject().put("integerValue", "$realBattery"))
                 put("meshRole", JSONObject().put("stringValue", "Relay Gateway Node"))
                 put("lastSeen", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
-                put("location", JSONObject().put("stringValue", "Wayanad / Kerala"))
+                put("location", JSONObject().put("stringValue", realLocationName))
+                put("latitude", JSONObject().put("doubleValue", realLat))
+                put("longitude", JSONObject().put("doubleValue", realLon))
             }
 
             val body = JSONObject().put("fields", fields)
@@ -149,7 +168,7 @@ class FirebaseCloudGateway(
 
     suspend fun uploadSosToFirestore(
         packet: GarudaPacket,
-        victimName: String = "Citizen (Samsung Galaxy)",
+        victimName: String = "Citizen",
         notes: String = "Relayed via Ground Mesh to Firebase Firestore"
     ): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -165,14 +184,16 @@ class FirebaseCloudGateway(
                 doOutput = true
             }
 
+            val realBattery = hardwareManager?.getRealBatteryPercentage() ?: 80
+
             val fields = JSONObject().apply {
                 put("victimName", JSONObject().put("stringValue", victimName))
                 put("bloodGroup", JSONObject().put("stringValue", "O+"))
                 put("latitude", JSONObject().put("doubleValue", packet.latitude))
                 put("longitude", JSONObject().put("doubleValue", packet.longitude))
                 put("hopCount", JSONObject().put("integerValue", "${packet.hopCount}"))
-                put("batteryLevel", JSONObject().put("integerValue", "88"))
-                put("relayedByGatewayId", JSONObject().put("stringValue", "UPLINK-GATEWAY-FIREBASE"))
+                put("batteryLevel", JSONObject().put("integerValue", "$realBattery"))
+                put("relayedByGatewayId", JSONObject().put("stringValue", deviceId))
                 put("notes", JSONObject().put("stringValue", notes))
                 put("priority", JSONObject().put("stringValue", "CRITICAL (Red)"))
                 put("status", JSONObject().put("stringValue", "Pending Triage"))

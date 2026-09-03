@@ -43,13 +43,16 @@ class MainActivity : ComponentActivity() {
 
     private fun requestBlePermissions() {
         val permissions = mutableListOf<String>()
+        
+        // Location permissions for GPS Hardware
+        permissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        permissions.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        
+        // Bluetooth permissions for BLE Mesh
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             permissions.add(android.Manifest.permission.BLUETOOTH_SCAN)
             permissions.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
             permissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            permissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
-            permissions.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)

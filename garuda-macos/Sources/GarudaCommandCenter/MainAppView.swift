@@ -23,6 +23,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
 public struct MainAppView: View {
     @StateObject private var store = CommandCenterStore()
     @State private var selectedTab: NavigationTab = .liveMap
+    @State private var isShowingDevicesModal: Bool = false
     
     public init() {}
     
@@ -38,8 +39,10 @@ public struct MainAppView: View {
             .listStyle(.sidebar)
             
             // Sidebar Footer Alert Status & Live Uplink Status
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Divider()
+                
+                // Emergency Mode Indicator
                 HStack {
                     Circle()
                         .fill(store.isEmergencyBroadcastActive ? Color.red : Color.green)
@@ -54,6 +57,7 @@ public struct MainAppView: View {
                 
                 Divider()
                 
+                // Server Port Info
                 HStack(spacing: 4) {
                     Circle()
                         .fill(store.isServerRunning ? Color.blue : Color.gray)
@@ -63,21 +67,36 @@ public struct MainAppView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(store.connectedClientsCount > 0 ? Color.green : Color.orange)
-                        .frame(width: 6, height: 6)
-                    Text("\(store.connectedClientsCount) Citizen Device(s) Online")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(store.connectedClientsCount > 0 ? .green : .orange)
+                // Clickable Sidebar Device Pill Button
+                Button {
+                    isShowingDevicesModal = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(store.activeDevices.isEmpty ? Color.orange : Color.green)
+                            .frame(width: 7, height: 7)
+                        
+                        Text("\(store.activeDevices.count) Online Node(s)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(store.activeDevices.isEmpty ? .orange : .green)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.25))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(store.activeDevices.isEmpty ? Color.orange.opacity(0.3) : Color.green.opacity(0.3), lineWidth: 1)
+                    )
                 }
-                
-                if let firstDev = store.activeDevices.first {
-                    Text("📱 \(firstDev.name)")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundColor(.green.opacity(0.8))
-                        .lineLimit(1)
-                }
+                .buttonStyle(.plain)
+                .help("Click to inspect all connected mobile nodes and gateways")
             }
             .padding(12)
         } detail: {
@@ -96,23 +115,6 @@ public struct MainAppView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(store.connectedClientsCount > 0 ? Color.green : Color.orange)
-                            .frame(width: 8, height: 8)
-                        Text(store.connectedClientsCount > 0 
-                             ? "🟢 \(store.connectedClientsCount) Active Device (\(store.activeDevices.first?.name ?? "Online"))"
-                             : "🟡 Waiting for Phone Link...")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(store.connectedClientsCount > 0 ? .green : .secondary)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color.black.opacity(0.3))
-                    .cornerRadius(6)
-                }
-                
                 ToolbarItem(placement: .automatic) {
                     Button {
                         store.toggleSimulation()
@@ -127,6 +129,9 @@ public struct MainAppView: View {
                     .help("Simulate incoming multi-hop BLE mesh SOS packets for live demo")
                 }
             }
+        }
+        .sheet(isPresented: $isShowingDevicesModal) {
+            ConnectedDevicesModalView(store: store)
         }
     }
 }
