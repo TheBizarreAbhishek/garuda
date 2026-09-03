@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.project.garuda.ui.sos.CitizenScreen
+import com.project.garuda.ui.navigation.GarudaMainScreen
 import com.project.garuda.ui.sos.CitizenViewModel
 import com.project.garuda.ui.theme.AmoledBlack
 import com.project.garuda.ui.theme.GarudaTheme
@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = AmoledBlack
                 ) {
-                    CitizenScreen(viewModel = viewModel)
+                    GarudaMainScreen(viewModel = viewModel)
                 }
             }
         }

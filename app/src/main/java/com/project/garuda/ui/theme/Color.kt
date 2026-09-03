@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 // Emergency Brand Palette
 val EmergencyBloodRed = Color(0xFFE53935)
+val EmergencyRed = EmergencyBloodRed
 val EmergencyBloodRedDark = Color(0xFFB71C1C)
 val EmergencyBloodRedLight = Color(0xFFEF5350)
 val EmergencyRedContainer = Color(0xFF380808)
