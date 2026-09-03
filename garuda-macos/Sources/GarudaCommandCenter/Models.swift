@@ -178,3 +178,34 @@ public struct HazardReport: Identifiable, Codable, Hashable {
         self.description = description
     }
 }
+
+public struct ConnectedDevice: Identifiable, Codable, Hashable {
+    public let id: String
+    public var name: String
+    public var batteryLevel: Int
+    public var status: String
+    public var meshRole: String
+    public var location: String
+    public var lastSeen: Date
+    public var isOnline: Bool
+    
+    public init(
+        id: String,
+        name: String,
+        batteryLevel: Int = 88,
+        status: String = "ONLINE",
+        meshRole: String = "Relay Gateway Node",
+        location: String = "Wayanad / Kerala",
+        lastSeen: Date = Date(),
+        isOnline: Bool = true
+    ) {
+        self.id = id
+        self.name = name
+        self.batteryLevel = batteryLevel
+        self.status = status
+        self.meshRole = meshRole
+        self.location = location
+        self.lastSeen = lastSeen
+        self.isOnline = isOnline
+    }
+}

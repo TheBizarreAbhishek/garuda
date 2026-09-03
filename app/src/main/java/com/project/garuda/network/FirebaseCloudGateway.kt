@@ -1,5 +1,6 @@
 package com.project.garuda.network
 
+import android.os.Build
 import android.util.Log
 import com.project.garuda.mesh.protocol.GarudaPacket
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +36,7 @@ class FirebaseCloudGateway(
 ) {
     companion object {
         private const val TAG = "GarudaFirebase"
+        private const val API_KEY = "AIzaSyBkRJHDTMJQMz1AkdxjxsFr_Uww7VwFNsY"
     }
 
     private var projectId = "garuda-2aba2"
@@ -42,6 +44,7 @@ class FirebaseCloudGateway(
     val syncState: StateFlow<FirebaseSyncState> = _syncState.asStateFlow()
 
     private var pollJob: Job? = null
+    private val deviceId = (Build.MODEL ?: "GalaxyDevice").replace(" ", "_") + "_" + (Build.SERIAL.takeIf { it != "unknown" } ?: "NODE01")
 
     init {
         startCloudListener()
@@ -58,14 +61,50 @@ class FirebaseCloudGateway(
         pollJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 fetchGovernmentAlertStatus()
-                delay(3000) // Poll cloud state every 3 seconds
+                sendDeviceHeartbeat()
+                delay(4000) // Poll & Heartbeat every 4 seconds
             }
+        }
+    }
+
+    private suspend fun sendDeviceHeartbeat() {
+        try {
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/active_nodes/$deviceId?key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "PATCH"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+            }
+
+            val deviceName = "Samsung " + (Build.MODEL ?: "Galaxy Device")
+            val fields = JSONObject().apply {
+                put("deviceId", JSONObject().put("stringValue", deviceId))
+                put("deviceName", JSONObject().put("stringValue", deviceName))
+                put("status", JSONObject().put("stringValue", "ONLINE"))
+                put("batteryLevel", JSONObject().put("integerValue", "88"))
+                put("meshRole", JSONObject().put("stringValue", "Relay Gateway Node"))
+                put("lastSeen", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
+                put("location", JSONObject().put("stringValue", "Wayanad / Kerala"))
+            }
+
+            val body = JSONObject().put("fields", fields)
+            val writer = OutputStreamWriter(connection.outputStream)
+            writer.write(body.toString())
+            writer.flush()
+            writer.close()
+
+            connection.responseCode // execute request
+        } catch (e: Exception) {
+            Log.v(TAG, "Heartbeat note: ${e.message}")
         }
     }
 
     private suspend fun fetchGovernmentAlertStatus() {
         try {
-            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/alerts/current_status"
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/alerts/current_status?key=$API_KEY"
             val url = URL(urlString)
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 connectTimeout = 3000
@@ -98,7 +137,6 @@ class FirebaseCloudGateway(
                     )
                 }
             } else if (connection.responseCode == 404) {
-                // Collection or document not created yet; cloud is reachable
                 _syncState.value = _syncState.value.copy(
                     isConnected = true,
                     lastSyncTimestamp = System.currentTimeMillis()
@@ -116,7 +154,7 @@ class FirebaseCloudGateway(
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val docId = "SOS-${packet.packetId}"
-            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/disaster_sos?documentId=$docId"
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/disaster_sos?documentId=$docId&key=$API_KEY"
             val url = URL(urlString)
 
             val connection = (url.openConnection() as HttpURLConnection).apply {
@@ -149,7 +187,7 @@ class FirebaseCloudGateway(
             writer.close()
 
             val code = connection.responseCode
-            val success = code in 200..299 || code == 409 // 409 if already exists
+            val success = code in 200..299 || code == 409
 
             if (success) {
                 _syncState.value = _syncState.value.copy(

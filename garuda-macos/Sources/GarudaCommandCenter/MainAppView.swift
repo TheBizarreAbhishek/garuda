@@ -58,14 +58,26 @@ public struct MainAppView: View {
                     Circle()
                         .fill(store.isServerRunning ? Color.blue : Color.gray)
                         .frame(width: 6, height: 6)
-                    Text("Gateway Server: Port \(store.serverPort)")
+                    Text("Gateway Server: :\(store.serverPort)")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.secondary)
                 }
                 
-                Text("\(store.connectedClientsCount) Mobile Gateway(s) Linked")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(store.connectedClientsCount > 0 ? .green : .secondary)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(store.connectedClientsCount > 0 ? Color.green : Color.orange)
+                        .frame(width: 6, height: 6)
+                    Text("\(store.connectedClientsCount) Citizen Device(s) Online")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(store.connectedClientsCount > 0 ? .green : .orange)
+                }
+                
+                if let firstDev = store.activeDevices.first {
+                    Text("📱 \(firstDev.name)")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(.green.opacity(0.8))
+                        .lineLimit(1)
+                }
             }
             .padding(12)
         } detail: {
@@ -84,6 +96,23 @@ public struct MainAppView: View {
                 }
             }
             .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(store.connectedClientsCount > 0 ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                        Text(store.connectedClientsCount > 0 
+                             ? "🟢 \(store.connectedClientsCount) Active Device (\(store.activeDevices.first?.name ?? "Online"))"
+                             : "🟡 Waiting for Phone Link...")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(store.connectedClientsCount > 0 ? .green : .secondary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.3))
+                    .cornerRadius(6)
+                }
+                
                 ToolbarItem(placement: .automatic) {
                     Button {
                         store.toggleSimulation()

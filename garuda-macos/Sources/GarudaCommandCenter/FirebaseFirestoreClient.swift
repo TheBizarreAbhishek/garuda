@@ -24,13 +24,15 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     // MARK: - Polling / Streaming Listener
     public func startLiveFirestoreListener(
         onSosReceived: @escaping @MainActor ([SosSignal]) -> Void,
-        onHazardsReceived: @escaping @MainActor ([HazardReport]) -> Void
+        onHazardsReceived: @escaping @MainActor ([HazardReport]) -> Void,
+        onDevicesReceived: @escaping @MainActor ([ConnectedDevice]) -> Void
     ) {
         pollTimer?.cancel()
         
         // Initial fetch
         fetchSosSignals(completion: onSosReceived)
         fetchHazards(completion: onHazardsReceived)
+        fetchConnectedDevices(completion: onDevicesReceived)
         
         // Live poll every 3 seconds for new cloud documents
         pollTimer = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -38,12 +40,58 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
             .sink { [weak self] _ in
                 self?.fetchSosSignals(completion: onSosReceived)
                 self?.fetchHazards(completion: onHazardsReceived)
+                self?.fetchConnectedDevices(completion: onDevicesReceived)
             }
     }
     
     public func stopListener() {
         pollTimer?.cancel()
         pollTimer = nil
+    }
+    
+    // MARK: - Fetch Connected Active Devices
+    public func fetchConnectedDevices(completion: @escaping @MainActor ([ConnectedDevice]) -> Void) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/active_nodes?key=\(apiKey)") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 4.0
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data, error == nil else { return }
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let documents = json["documents"] as? [[String: Any]] {
+                var devices: [ConnectedDevice] = []
+                for doc in documents {
+                    guard let fields = doc["fields"] as? [String: Any],
+                          let name = doc["name"] as? String else { continue }
+                    
+                    let docId = name.components(separatedBy: "/").last ?? "UNKNOWN"
+                    let devName = (fields["deviceName"] as? [String: Any])?["stringValue"] as? String ?? docId
+                    let status = (fields["status"] as? [String: Any])?["stringValue"] as? String ?? "ONLINE"
+                    let role = (fields["meshRole"] as? [String: Any])?["stringValue"] as? String ?? "Relay Node"
+                    let battery = Int((fields["batteryLevel"] as? [String: Any])?["integerValue"] as? String ?? "88") ?? 88
+                    let loc = (fields["location"] as? [String: Any])?["stringValue"] as? String ?? "Disaster Zone"
+                    
+                    let dev = ConnectedDevice(
+                        id: docId,
+                        name: devName,
+                        batteryLevel: battery,
+                        status: status,
+                        meshRole: role,
+                        location: loc,
+                        lastSeen: Date(),
+                        isOnline: true
+                    )
+                    devices.append(dev)
+                }
+                
+                DispatchQueue.main.async {
+                    completion(devices)
+                }
+            }
+        }.resume()
     }
     
     // MARK: - Fetch SOS Signals from Firestore

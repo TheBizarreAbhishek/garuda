@@ -7,6 +7,7 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var signals: [SosSignal] = []
     @Published public var alerts: [DisasterAlert] = []
     @Published public var hazards: [HazardReport] = []
+    @Published public var activeDevices: [ConnectedDevice] = []
     @Published public var selectedSignal: SosSignal?
     @Published public var isEmergencyBroadcastActive: Bool = true
     @Published public var activeDistrict: String = "Wayanad / Kerala Region"
@@ -50,6 +51,12 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                 if !self.hazards.contains(where: { $0.id == hazard.id }) {
                     self.hazards.insert(hazard, at: 0)
                 }
+            }
+        } onDevicesReceived: { [weak self] devices in
+            guard let self = self else { return }
+            withAnimation(.easeInOut) {
+                self.activeDevices = devices
+                self.connectedClientsCount = max(self.connectedClientsCount, devices.count)
             }
         }
     }
