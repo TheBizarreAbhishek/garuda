@@ -4,8 +4,8 @@ import Combine
 public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendable {
     public static let shared = FirebaseFirestoreClient()
     
-    @Published public var projectId: String = "garuda-disaster-sih"
-    @Published public var apiKey: String = ""
+    @Published public var projectId: String = "garuda-2aba2"
+    @Published public var apiKey: String = "AIzaSyBkRJHDTMJQMz1AkdxjxsFr_Uww7VwFNsY"
     @Published public var isSyncing: Bool = false
     @Published public var lastSyncTime: Date?
     @Published public var connectionStatus: String = "Connected to Firebase Firestore"
@@ -13,7 +13,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     private var cancellables = Set<AnyCancellable>()
     private var pollTimer: AnyCancellable?
     
-    public init(projectId: String = "garuda-disaster-sih") {
+    public init(projectId: String = "garuda-2aba2") {
         self.projectId = projectId
     }
     

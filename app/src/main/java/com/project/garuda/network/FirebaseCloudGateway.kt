@@ -21,7 +21,7 @@ import java.net.URL
 
 data class FirebaseSyncState(
     val isConnected: Boolean = false,
-    val projectId: String = "garuda-disaster-sih",
+    val projectId: String = "garuda-2aba2",
     val lastSyncTimestamp: Long = 0,
     val syncedPacketsCount: Int = 0,
     val isEmergencyActive: Boolean = false,
@@ -37,7 +37,7 @@ class FirebaseCloudGateway(
         private const val TAG = "GarudaFirebase"
     }
 
-    private var projectId = "garuda-disaster-sih"
+    private var projectId = "garuda-2aba2"
     private val _syncState = MutableStateFlow(FirebaseSyncState(projectId = projectId))
     val syncState: StateFlow<FirebaseSyncState> = _syncState.asStateFlow()
 
