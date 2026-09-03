@@ -20,6 +20,7 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     public init() {
         loadMockData()
         setupLiveServer()
+        setupLiveFirebaseCloud()
     }
     
     private func setupLiveServer() {
@@ -31,6 +32,26 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         server.start(port: 8080)
         isServerRunning = server.isRunning
         serverPort = server.port
+    }
+    
+    private func setupLiveFirebaseCloud() {
+        FirebaseFirestoreClient.shared.startLiveFirestoreListener { [weak self] cloudSignals in
+            guard let self = self else { return }
+            for signal in cloudSignals {
+                if let index = self.signals.firstIndex(where: { $0.id == signal.id }) {
+                    self.signals[index] = signal
+                } else {
+                    self.signals.insert(signal, at: 0)
+                }
+            }
+        } onHazardsReceived: { [weak self] cloudHazards in
+            guard let self = self else { return }
+            for hazard in cloudHazards {
+                if !self.hazards.contains(where: { $0.id == hazard.id }) {
+                    self.hazards.insert(hazard, at: 0)
+                }
+            }
+        }
     }
     
     // MARK: - CommandGridServerDelegate
@@ -89,6 +110,13 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
             if selectedSignal?.id == id {
                 selectedSignal = signals[index]
             }
+            
+            // Sync status update to Firebase Firestore Cloud
+            FirebaseFirestoreClient.shared.updateSignalStatusOnCloud(
+                signalId: id,
+                status: newStatus,
+                assignedUnit: assignedUnit
+            )
         }
     }
     
@@ -109,7 +137,10 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         isEmergencyBroadcastActive = true
         activeDistrict = district
         
-        // Broadcast over live SSE network to all connected Android citizen phones
+        // 1. Publish to Firebase Firestore in Cloud
+        FirebaseFirestoreClient.shared.publishEmergencyActivation(alert: newAlert)
+        
+        // 2. Broadcast over live SSE network to all connected Android citizen phones
         CommandGridServer.shared.broadcastSseEvent(
             event: "emergency_activated",
             data: [

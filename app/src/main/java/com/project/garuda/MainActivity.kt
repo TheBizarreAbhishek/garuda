@@ -37,6 +37,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.project.garuda.mesh.protocol.GarudaPacket
 import com.project.garuda.mesh.service.MeshForegroundService
+import com.project.garuda.network.FirebaseCloudGateway
+import com.project.garuda.network.FirebaseSyncState
 import com.project.garuda.network.GatewayConnectionState
 import com.project.garuda.network.UplinkGatewayManager
 import com.project.garuda.ui.theme.GarudaTheme
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private val receivedPackets = mutableStateListOf<GarudaPacket>()
     
     private lateinit var uplinkManager: UplinkGatewayManager
+    private lateinit var firebaseGateway: FirebaseCloudGateway
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -68,18 +71,24 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         uplinkManager = UplinkGatewayManager(lifecycleScope)
+        firebaseGateway = FirebaseCloudGateway(lifecycleScope)
 
         setContent {
             val gatewayState by uplinkManager.connectionState.collectAsState()
+            val firebaseState by firebaseGateway.syncState.collectAsState()
 
             GarudaTheme {
                 MainScreen(
                     isServiceBound = isServiceBound.value,
                     gatewayState = gatewayState,
+                    firebaseState = firebaseState,
                     onStartService = { startAndBindMeshService() },
                     onStopService = { stopMeshService() },
                     onSendSos = { broadcastAndUploadSos() },
-                    onRetryUplink = { uplinkManager.restartConnection() },
+                    onRetryUplink = { 
+                        uplinkManager.restartConnection()
+                        firebaseGateway.startCloudListener()
+                    },
                     receivedPackets = receivedPackets
                 )
             }
@@ -126,17 +135,25 @@ class MainActivity : ComponentActivity() {
         }
         receivedPackets.add(0, packet)
 
-        // 2. Upload over Uplink Bridge to Garuda Command Grid (macOS)
+        // 2. Upload to Firebase Firestore in Cloud
         lifecycleScope.launch {
-            val uploaded = uplinkManager.uploadSosPacket(
+            val firebaseSuccess = firebaseGateway.uploadSosToFirestore(
                 packet = packet,
                 victimName = "Citizen (Samsung Galaxy)",
-                notes = "Live SOS triggered from mobile device over BLE + Gateway Uplink"
+                notes = "Live SOS sent to Firebase Firestore disaster_sos collection"
             )
-            if (uploaded) {
-                Toast.makeText(this@MainActivity, "⚡ SOS Relayed to Command Grid!", Toast.LENGTH_SHORT).show()
+
+            // 3. Also upload via direct gateway stream
+            uplinkManager.uploadSosPacket(
+                packet = packet,
+                victimName = "Citizen (Samsung Galaxy)",
+                notes = "Live SOS relayed via Uplink Gateway"
+            )
+
+            if (firebaseSuccess) {
+                Toast.makeText(this@MainActivity, "🔥 SOS Synced to Firebase Cloud!", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this@MainActivity, "Broadcasted via BLE Mesh (Gateway offline)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "⚡ SOS Relayed over BLE Mesh", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -154,6 +171,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     isServiceBound: Boolean,
     gatewayState: GatewayConnectionState,
+    firebaseState: FirebaseSyncState,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onSendSos: () -> Unit,
@@ -205,7 +223,7 @@ fun MainScreen(
                 },
                 actions = {
                     IconButton(onClick = onRetryUplink) {
-                        Text(if (gatewayState.isConnected) "🟢" else "🔴", fontSize = 14.sp)
+                        Text(if (firebaseState.isConnected) "🔥" else "📡", fontSize = 14.sp)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -221,8 +239,8 @@ fun MainScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Live Government Alert Banner (from Command Grid)
-            if (gatewayState.isEmergencyActiveFromGov) {
+            // Live Government Alert Banner (from Firebase Firestore)
+            if (firebaseState.isEmergencyActive || gatewayState.isEmergencyActiveFromGov) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
@@ -233,7 +251,7 @@ fun MainScreen(
                             Text("🚨", fontSize = 16.sp)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "GOVERNMENT DISASTER ALERT",
+                                text = "GOVERNMENT DISASTER ACTIVATION",
                                 fontWeight = FontWeight.Black,
                                 color = Color.White,
                                 fontSize = 13.sp
@@ -241,14 +259,14 @@ fun MainScreen(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = gatewayState.alertHeadline,
+                            text = if (firebaseState.isEmergencyActive) firebaseState.alertHeadline else gatewayState.alertHeadline,
                             fontWeight = FontWeight.Bold,
                             color = Color.Yellow,
                             fontSize = 14.sp
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = gatewayState.alertInstructions,
+                            text = if (firebaseState.isEmergencyActive) firebaseState.alertInstructions else gatewayState.alertInstructions,
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 12.sp
                         )
@@ -257,12 +275,12 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Command Grid Uplink Status Card
+            // Firebase Cloud Connection Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (gatewayState.isConnected) Color(0xFF0D47A1).copy(alpha = 0.15f) else Color.DarkGray.copy(alpha = 0.15f)
+                    containerColor = Color(0xFFFF6F00).copy(alpha = 0.15f)
                 )
             ) {
                 Row(
@@ -274,40 +292,31 @@ fun MainScreen(
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(if (gatewayState.isConnected) Color(0xFF29B6F6) else Color.Gray)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("🔥", fontSize = 12.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (gatewayState.isConnected) "COMMAND GRID UPLINK ACTIVE" else "UPLINK GATEWAY SEARCHING...",
+                                text = "FIREBASE FIRESTORE CLOUD",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = if (gatewayState.isConnected) Color(0xFF29B6F6) else Color.Gray
+                                color = Color(0xFFFFB300)
                             )
                         }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (gatewayState.isConnected)
-                                "Connected: ${gatewayState.serverHost}:${gatewayState.serverPort} (${gatewayState.latencyMs}ms)"
-                            else
-                                "Auto-detecting Mac Command Center (port ${gatewayState.serverPort})",
+                            text = "Project: ${firebaseState.projectId} • ${firebaseState.syncedPacketsCount} Synced",
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = Color.Gray
+                            color = Color.LightGray
                         )
                     }
 
-                    if (!gatewayState.isConnected) {
-                        Button(
-                            onClick = onRetryUplink,
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("Retry", fontSize = 11.sp)
-                        }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF2E7D32).copy(alpha = 0.3f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("CLOUD ACTIVE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF81C784))
                     }
                 }
             }
@@ -331,7 +340,7 @@ fun MainScreen(
                         color = Color.White
                     )
                     Text(
-                        "Relays via BLE Mesh + Command Grid Uplink",
+                        "BLE Mesh + Firebase Firestore Uplink",
                         fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.8f)
                     )
@@ -361,8 +370,8 @@ fun MainScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Local Telemetry Stream", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Text("${receivedPackets.size} Relayed", fontSize = 12.sp, color = Color.Gray)
+                Text("Local & Cloud Telemetry Stream", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text("${receivedPackets.size} Dispatched", fontSize = 12.sp, color = Color.Gray)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -375,7 +384,7 @@ fun MainScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "No BLE mesh packets recorded.\nTap 'Broadcast SOS Beacon' to transmit.",
+                        "No SOS packets recorded.\nTap 'Broadcast SOS Beacon' to transmit to Firebase.",
                         color = Color.Gray,
                         fontSize = 13.sp
                     )
@@ -428,9 +437,9 @@ fun PacketCard(packet: GarudaPacket) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                "Triage: Critical | Type: Emergency SOS",
+                "Triage: Critical | Status: Synced to Firebase",
                 fontSize = 11.sp,
-                color = Color(0xFFFF5252),
+                color = Color(0xFFFFB300),
                 fontWeight = FontWeight.SemiBold
             )
         }
