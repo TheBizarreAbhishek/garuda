@@ -48,7 +48,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     
     // MARK: - Fetch SOS Signals from Firestore
     public func fetchSosSignals(completion: @escaping @MainActor ([SosSignal]) -> Void) {
-        guard let url = URL(string: "\(firestoreBaseUrl)/disaster_sos") else { return }
+        guard let url = URL(string: "\(firestoreBaseUrl)/disaster_sos?key=\(apiKey)") else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -116,7 +116,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     
     // MARK: - Fetch Hazards
     public func fetchHazards(completion: @escaping @MainActor ([HazardReport]) -> Void) {
-        guard let url = URL(string: "\(firestoreBaseUrl)/hazard_reports") else { return }
+        guard let url = URL(string: "\(firestoreBaseUrl)/hazard_reports?key=\(apiKey)") else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -164,7 +164,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     
     // MARK: - Broadcast Emergency Activation Order to Firestore
     public func publishEmergencyActivation(alert: DisasterAlert) {
-        guard let url = URL(string: "\(firestoreBaseUrl)/alerts/current_status") else { return }
+        guard let url = URL(string: "\(firestoreBaseUrl)/alerts/current_status?key=\(apiKey)") else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
@@ -195,7 +195,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     
     // MARK: - Update Signal Status on Firestore
     public func updateSignalStatusOnCloud(signalId: String, status: RescueStatus, assignedUnit: String?) {
-        guard let url = URL(string: "\(firestoreBaseUrl)/disaster_sos/\(signalId)?updateMask.fieldPaths=status&updateMask.fieldPaths=assignedUnit") else { return }
+        guard let url = URL(string: "\(firestoreBaseUrl)/disaster_sos/\(signalId)?updateMask.fieldPaths=status&updateMask.fieldPaths=assignedUnit&key=\(apiKey)") else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
