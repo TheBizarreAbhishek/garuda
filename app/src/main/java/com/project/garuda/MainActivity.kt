@@ -1,26 +1,18 @@
 package com.project.garuda
 
-import android.Manifest
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.project.garuda.mesh.service.MeshForegroundService
 import com.project.garuda.ui.sos.CitizenScreen
 import com.project.garuda.ui.sos.CitizenViewModel
 import com.project.garuda.ui.theme.AmoledBlack
@@ -28,57 +20,17 @@ import com.project.garuda.ui.theme.GarudaTheme
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: CitizenViewModel by viewModels()
-
-    private var meshService: MeshForegroundService? = null
-    private var isServiceBound = false
-
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as? MeshForegroundService.LocalBinder
-            meshService = binder?.getService()
-            isServiceBound = true
-            meshService?.let { viewModel.attachMeshService(it) }
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            meshService = null
-            isServiceBound = false
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        startAndBindMeshService()
+        requestBlePermissions()
 
         setContent {
+            val context = LocalContext.current
+            val viewModel = remember { CitizenViewModel(context.applicationContext) }
+
             GarudaTheme {
-                val permissionsToRequest = remember {
-                    mutableListOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    ).apply {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            add(Manifest.permission.BLUETOOTH_SCAN)
-                            add(Manifest.permission.BLUETOOTH_ADVERTISE)
-                            add(Manifest.permission.BLUETOOTH_CONNECT)
-                        }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            add(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }.toTypedArray()
-                }
-
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.RequestMultiplePermissions()
-                ) { _ -> }
-
-                LaunchedEffect(Unit) {
-                    permissionLauncher.launch(permissionsToRequest)
-                }
-
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = AmoledBlack
@@ -89,18 +41,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startAndBindMeshService() {
-        val intent = Intent(this, MeshForegroundService::class.java).apply {
-            action = MeshForegroundService.ACTION_START_STANDBY
+    private fun requestBlePermissions() {
+        val permissions = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(android.Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+            permissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            permissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            permissions.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         }
-        ContextCompat.startForegroundService(this, intent)
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-    }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
 
-    override fun onDestroy() {
-        if (isServiceBound) {
-            unbindService(serviceConnection)
+        val missing = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        super.onDestroy()
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), 101)
+        }
     }
 }
