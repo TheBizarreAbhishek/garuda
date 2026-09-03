@@ -11,6 +11,7 @@ import com.project.garuda.mesh.ble.BleScannerManager
 import com.project.garuda.mesh.engine.MeshRelayEngine
 import com.project.garuda.mesh.protocol.GarudaPacket
 import com.project.garuda.mesh.service.MeshForegroundService
+import com.project.garuda.network.FirebaseCloudGateway
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,13 +36,17 @@ class CitizenViewModel(
     private var countdownJob: Job? = null
     private var broadcastingJob: Job? = null
 
-    // Real BLE Mesh Components
+    // BLE Mesh Components
     private var advertiserManager: BleAdvertiserManager? = null
     private var scannerManager: BleScannerManager? = null
     private var meshRelayEngine: MeshRelayEngine? = null
 
+    // Cloud Firebase Gateway
+    val firebaseGateway = FirebaseCloudGateway(viewModelScope)
+
     init {
         initBleMeshEngine()
+        observeFirebaseGovernmentAlerts()
         observeMeshTelemetry()
     }
 
@@ -73,10 +78,30 @@ class CitizenViewModel(
         }
     }
 
+    private fun observeFirebaseGovernmentAlerts() {
+        viewModelScope.launch {
+            firebaseGateway.syncState.collect { syncState ->
+                if (syncState.isEmergencyActive && _uiState.value.mode == DisasterMode.STANDBY && !_uiState.value.isGovernmentAlertDialogOpen) {
+                    _uiState.update {
+                        it.copy(
+                            pendingGovAlert = GovernmentAlert(
+                                headline = syncState.alertHeadline,
+                                region = syncState.alertDistrict,
+                                instructions = syncState.alertInstructions,
+                                timestampFormatted = "Live from Command Grid"
+                            ),
+                            isGovernmentAlertDialogOpen = true
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     private fun observeMeshTelemetry() {
         viewModelScope.launch {
             while (isActive) {
-                delay(8000)
+                delay(4000)
                 if (_uiState.value.mode == DisasterMode.ACTIVE_EMERGENCY) {
                     _uiState.update { current ->
                         val newPeers = (current.meshStatus.peersNearby + ((-1..1).random())).coerceIn(2, 9)
@@ -194,7 +219,6 @@ class CitizenViewModel(
         val packetHex = "GD-" + packetIdInt.toString(16).uppercase()
         val nowEpoch = (System.currentTimeMillis() / 1000).toInt()
 
-        // 1. Update UI State
         _uiState.update {
             it.copy(
                 mode = DisasterMode.ACTIVE_EMERGENCY,
@@ -211,7 +235,6 @@ class CitizenViewModel(
             )
         }
 
-        // 2. Build and Broadcast Real 28-Byte Binary Garuda Packet over Bluetooth Low Energy
         val protocolEmergencyCode = when (emergencyType) {
             EmergencyType.MEDICAL -> GarudaPacket.EMERGENCY_MEDICAL
             EmergencyType.TRAPPED -> GarudaPacket.EMERGENCY_TRAPPED
@@ -226,13 +249,14 @@ class CitizenViewModel(
             packetId = packetIdInt,
             deviceHash = deviceHashInt,
             timestamp = nowEpoch,
-            latitude = 12.9716, // Fixed point lat
-            longitude = 77.5946, // Fixed point lon
+            latitude = 12.9716,
+            longitude = 77.5946,
             emergencyType = protocolEmergencyCode,
             hopCount = 0,
             ttl = GarudaPacket.DEFAULT_TTL
         )
 
+        // 1. Transmit Real 28-Byte Binary Packet over BLE Mesh
         try {
             meshRelayEngine?.broadcastPacket(garudaPacket)
             Log.i(TAG, "Transmitted Real BLE SOS Beacon: $packetHex with EmergencyCode=$protocolEmergencyCode")
@@ -240,7 +264,17 @@ class CitizenViewModel(
             Log.e(TAG, "BLE SOS Broadcast failed", e)
         }
 
-        // 3. Start Foreground Service to keep mesh active even if screen turns off
+        // 2. Upload to Firebase Firestore in Cloud
+        viewModelScope.launch {
+            val victimName = _uiState.value.medicalProfile.fullName
+            firebaseGateway.uploadSosToFirestore(
+                packet = garudaPacket,
+                victimName = victimName,
+                notes = "Live SOS beacon (${emergencyType.title}) with blood group ${_uiState.value.medicalProfile.bloodGroup}"
+            )
+        }
+
+        // 3. Start Foreground Service
         appContext?.let { ctx ->
             try {
                 val intent = Intent(ctx, MeshForegroundService::class.java).apply {
@@ -325,4 +359,3 @@ class CitizenViewModel(
         stopMeshScanner()
     }
 }
-

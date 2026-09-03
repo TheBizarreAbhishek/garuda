@@ -12,4 +12,7 @@ feature/*/build/
 .externalNativeBuild
 .cxx
 *.hprof
-
+.build/
+garuda-macos/.build/
+*.xcodeproj
+*.xcworkspace
