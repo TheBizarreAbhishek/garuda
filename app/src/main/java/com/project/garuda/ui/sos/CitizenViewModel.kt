@@ -1,7 +1,16 @@
 package com.project.garuda.ui.sos
 
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.garuda.mesh.ble.BleAdvertiserManager
+import com.project.garuda.mesh.ble.BleScannerManager
+import com.project.garuda.mesh.engine.MeshRelayEngine
+import com.project.garuda.mesh.protocol.GarudaPacket
+import com.project.garuda.mesh.service.MeshForegroundService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,8 +19,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
-class CitizenViewModel : ViewModel() {
+class CitizenViewModel(
+    private val appContext: Context? = null
+) : ViewModel() {
+
+    companion object {
+        private const val TAG = "CitizenViewModel"
+    }
 
     private val _uiState = MutableStateFlow(CitizenUiState())
     val uiState: StateFlow<CitizenUiState> = _uiState.asStateFlow()
@@ -19,23 +35,54 @@ class CitizenViewModel : ViewModel() {
     private var countdownJob: Job? = null
     private var broadcastingJob: Job? = null
 
+    // Real BLE Mesh Components
+    private var advertiserManager: BleAdvertiserManager? = null
+    private var scannerManager: BleScannerManager? = null
+    private var meshRelayEngine: MeshRelayEngine? = null
+
     init {
-        // Setup initial state
-        observeSimulatedMeshTelemetry()
+        initBleMeshEngine()
+        observeMeshTelemetry()
     }
 
-    private fun observeSimulatedMeshTelemetry() {
+    private fun initBleMeshEngine() {
+        if (appContext != null) {
+            try {
+                advertiserManager = BleAdvertiserManager(appContext)
+                scannerManager = BleScannerManager(appContext)
+                meshRelayEngine = MeshRelayEngine(advertiserManager, scannerManager, viewModelScope)
+
+                // Listen to live incoming mesh packets over Bluetooth
+                viewModelScope.launch {
+                    meshRelayEngine?.incomingPackets?.collect { packet ->
+                        Log.d(TAG, "Received live BLE Mesh Packet: ID=0x${packet.packetId.toString(16)}, type=${packet.packetType}, hops=${packet.hopCount}")
+                        _uiState.update { current ->
+                            current.copy(
+                                meshStatus = current.meshStatus.copy(
+                                    packetsRelayed = current.meshStatus.packetsRelayed + 1,
+                                    hopCount = packet.hopCount.coerceAtLeast(1),
+                                    lastSyncAgo = "Just now"
+                                )
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing BLE Mesh Engine", e)
+            }
+        }
+    }
+
+    private fun observeMeshTelemetry() {
         viewModelScope.launch {
             while (isActive) {
                 delay(8000)
                 if (_uiState.value.mode == DisasterMode.ACTIVE_EMERGENCY) {
                     _uiState.update { current ->
                         val newPeers = (current.meshStatus.peersNearby + ((-1..1).random())).coerceIn(2, 9)
-                        val newRelayed = current.meshStatus.packetsRelayed + (1..3).random()
                         current.copy(
                             meshStatus = current.meshStatus.copy(
                                 peersNearby = newPeers,
-                                packetsRelayed = newRelayed,
                                 lastSyncAgo = "Just now"
                             )
                         )
@@ -83,14 +130,36 @@ class CitizenViewModel : ViewModel() {
                 meshStatus = it.meshStatus.copy(isMeshActive = true)
             )
         }
+        startMeshScanner()
     }
 
     fun setDisasterMode(mode: DisasterMode) {
         if (mode == DisasterMode.STANDBY) {
             cancelSosCountdown()
             stopBroadcasting()
+            stopMeshScanner()
+        } else {
+            startMeshScanner()
         }
         _uiState.update { it.copy(mode = mode) }
+    }
+
+    private fun startMeshScanner() {
+        try {
+            scannerManager?.startScanning { rawBytes ->
+                meshRelayEngine?.processIncomingRawBytes(rawBytes)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start BLE scanning", e)
+        }
+    }
+
+    private fun stopMeshScanner() {
+        try {
+            scannerManager?.stopScanning()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to stop BLE scanning", e)
+        }
     }
 
     fun startSosCountdown() {
@@ -121,17 +190,19 @@ class CitizenViewModel : ViewModel() {
 
     private fun triggerActiveBroadcasting() {
         val emergencyType = _uiState.value.selectedEmergencyType
-        val randomPacketHex = "GD-" + (1000..9999).random().toString(16).uppercase()
-        val nowEpoch = System.currentTimeMillis() / 1000
+        val packetIdInt = Random.nextInt(10000, 99999)
+        val packetHex = "GD-" + packetIdInt.toString(16).uppercase()
+        val nowEpoch = (System.currentTimeMillis() / 1000).toInt()
 
+        // 1. Update UI State
         _uiState.update {
             it.copy(
                 mode = DisasterMode.ACTIVE_EMERGENCY,
                 sosState = SosBroadcastState.Broadcasting(
                     emergencyType = emergencyType,
                     elapsedSeconds = 0,
-                    packetId = randomPacketHex,
-                    timestampEpoch = nowEpoch
+                    packetId = packetHex,
+                    timestampEpoch = nowEpoch.toLong()
                 ),
                 meshStatus = it.meshStatus.copy(
                     isMeshActive = true,
@@ -140,6 +211,52 @@ class CitizenViewModel : ViewModel() {
             )
         }
 
+        // 2. Build and Broadcast Real 28-Byte Binary Garuda Packet over Bluetooth Low Energy
+        val protocolEmergencyCode = when (emergencyType) {
+            EmergencyType.MEDICAL -> GarudaPacket.EMERGENCY_MEDICAL
+            EmergencyType.TRAPPED -> GarudaPacket.EMERGENCY_TRAPPED
+            EmergencyType.FIRE -> GarudaPacket.EMERGENCY_FIRE
+            EmergencyType.FLOOD -> GarudaPacket.EMERGENCY_FLOOD
+            EmergencyType.GENERAL -> GarudaPacket.EMERGENCY_MEDICAL
+        }
+
+        val deviceHashInt = (Build.MODEL ?: "GarudaCitizen").hashCode()
+        val garudaPacket = GarudaPacket(
+            packetType = GarudaPacket.TYPE_SOS,
+            packetId = packetIdInt,
+            deviceHash = deviceHashInt,
+            timestamp = nowEpoch,
+            latitude = 12.9716, // Fixed point lat
+            longitude = 77.5946, // Fixed point lon
+            emergencyType = protocolEmergencyCode,
+            hopCount = 0,
+            ttl = GarudaPacket.DEFAULT_TTL
+        )
+
+        try {
+            meshRelayEngine?.broadcastPacket(garudaPacket)
+            Log.i(TAG, "Transmitted Real BLE SOS Beacon: $packetHex with EmergencyCode=$protocolEmergencyCode")
+        } catch (e: Exception) {
+            Log.e(TAG, "BLE SOS Broadcast failed", e)
+        }
+
+        // 3. Start Foreground Service to keep mesh active even if screen turns off
+        appContext?.let { ctx ->
+            try {
+                val intent = Intent(ctx, MeshForegroundService::class.java).apply {
+                    action = MeshForegroundService.ACTION_START_HIGH_ALERT
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ctx.startForegroundService(intent)
+                } else {
+                    ctx.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not start MeshForegroundService", e)
+            }
+        }
+
+        // 4. Elapsed Time Coroutine
         broadcastingJob?.cancel()
         broadcastingJob = viewModelScope.launch {
             var seconds = 0
@@ -160,12 +277,31 @@ class CitizenViewModel : ViewModel() {
     fun stopBroadcasting() {
         broadcastingJob?.cancel()
         broadcastingJob = null
+
+        try {
+            advertiserManager?.stopAdvertising()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping BLE advertising", e)
+        }
+
+        appContext?.let { ctx ->
+            try {
+                val intent = Intent(ctx, MeshForegroundService::class.java).apply {
+                    action = MeshForegroundService.ACTION_STOP_SERVICE
+                }
+                ctx.startService(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping MeshForegroundService", e)
+            }
+        }
+
         _uiState.update { it.copy(sosState = SosBroadcastState.Idle) }
     }
 
     fun markUserSafe() {
         countdownJob?.cancel()
-        broadcastingJob?.cancel()
+        stopBroadcasting()
+
         val contactsCount = _uiState.value.medicalProfile.emergencyContacts.size
 
         _uiState.update {
@@ -174,7 +310,7 @@ class CitizenViewModel : ViewModel() {
                     checkInTimestamp = System.currentTimeMillis(),
                     smsSentCount = contactsCount
                 ),
-                safeStatusMessage = "You are marked SAFE. Dispatching automated SMS status to $contactsCount contacts."
+                safeStatusMessage = "You are marked SAFE. Distress signal cancelled and automated SMS queued for $contactsCount contacts."
             )
         }
     }
@@ -182,4 +318,11 @@ class CitizenViewModel : ViewModel() {
     fun clearSafeMessage() {
         _uiState.update { it.copy(safeStatusMessage = null) }
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopBroadcasting()
+        stopMeshScanner()
+    }
 }
+

@@ -1,6 +1,11 @@
 package com.project.garuda.ui.sos
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -8,13 +13,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CitizenViewModelTest {
 
+    private val testDispatcher = StandardTestDispatcher()
     private lateinit var viewModel: CitizenViewModel
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(testDispatcher)
         viewModel = CitizenViewModel()
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
