@@ -34,8 +34,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.project.garuda.mesh.protocol.GarudaPacket
 import com.project.garuda.mesh.service.MeshForegroundService
+import com.project.garuda.network.GatewayConnectionState
+import com.project.garuda.network.UplinkGatewayManager
 import com.project.garuda.ui.theme.GarudaTheme
 import kotlinx.coroutines.launch
 
@@ -44,20 +47,14 @@ class MainActivity : ComponentActivity() {
     private var meshService: MeshForegroundService? = null
     private var isServiceBound = mutableStateOf(false)
     private val receivedPackets = mutableStateListOf<GarudaPacket>()
+    
+    private lateinit var uplinkManager: UplinkGatewayManager
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as? MeshForegroundService.LocalBinder
             meshService = binder?.getService()
             isServiceBound.value = true
-
-            // Observe incoming packets
-            meshService?.let { s ->
-                // Coroutine to collect incoming packets
-                (this@MainActivity as? ComponentActivity)?.let {
-                    // Collect packets from mesh relay engine
-                }
-            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -70,13 +67,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        uplinkManager = UplinkGatewayManager(lifecycleScope)
+
         setContent {
+            val gatewayState by uplinkManager.connectionState.collectAsState()
+
             GarudaTheme {
                 MainScreen(
                     isServiceBound = isServiceBound.value,
+                    gatewayState = gatewayState,
                     onStartService = { startAndBindMeshService() },
                     onStopService = { stopMeshService() },
-                    onSendSos = { broadcastSosBeacon() },
+                    onSendSos = { broadcastAndUploadSos() },
+                    onRetryUplink = { uplinkManager.restartConnection() },
                     receivedPackets = receivedPackets
                 )
             }
@@ -104,24 +107,37 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Garuda Mesh Stopped", Toast.LENGTH_SHORT).show()
     }
 
-    private fun broadcastSosBeacon() {
+    private fun broadcastAndUploadSos() {
+        val packet = GarudaPacket(
+            packetType = GarudaPacket.TYPE_SOS,
+            packetId = (System.currentTimeMillis() and 0xFFFFFFFFL).toInt(),
+            deviceHash = "GALAXY-DEVICE".hashCode(),
+            timestamp = (System.currentTimeMillis() / 1000).toInt(),
+            latitude = 11.6854,
+            longitude = 76.1320,
+            emergencyType = GarudaPacket.EMERGENCY_MEDICAL,
+            hopCount = 0,
+            ttl = 7
+        )
+
+        // 1. Broadcast locally over BLE Mesh
         meshService?.let { service ->
-            val packet = GarudaPacket(
-                packetType = GarudaPacket.TYPE_SOS,
-                packetId = (System.currentTimeMillis() and 0xFFFFFFFFL).toInt(),
-                deviceHash = "GARUDA-DEVICE".hashCode(),
-                timestamp = (System.currentTimeMillis() / 1000).toInt(),
-                latitude = 11.6854,
-                longitude = 76.1320,
-                emergencyType = GarudaPacket.EMERGENCY_MEDICAL,
-                hopCount = 0,
-                ttl = 7
-            )
             service.meshRelayEngine.broadcastPacket(packet)
-            receivedPackets.add(0, packet)
-            Toast.makeText(this, "Transmitted SOS Beacon over BLE Mesh!", Toast.LENGTH_SHORT).show()
-        } ?: run {
-            Toast.makeText(this, "Start BLE Mesh Service First!", Toast.LENGTH_SHORT).show()
+        }
+        receivedPackets.add(0, packet)
+
+        // 2. Upload over Uplink Bridge to Garuda Command Grid (macOS)
+        lifecycleScope.launch {
+            val uploaded = uplinkManager.uploadSosPacket(
+                packet = packet,
+                victimName = "Citizen (Samsung Galaxy)",
+                notes = "Live SOS triggered from mobile device over BLE + Gateway Uplink"
+            )
+            if (uploaded) {
+                Toast.makeText(this@MainActivity, "⚡ SOS Relayed to Command Grid!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this@MainActivity, "Broadcasted via BLE Mesh (Gateway offline)", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -137,9 +153,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(
     isServiceBound: Boolean,
+    gatewayState: GatewayConnectionState,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onSendSos: () -> Unit,
+    onRetryUplink: () -> Unit,
     receivedPackets: List<GarudaPacket>
 ) {
     val permissionsToRequest = remember {
@@ -185,6 +203,11 @@ fun MainScreen(
                         Text("PROJECT GARUDA", fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                     }
                 },
+                actions = {
+                    IconButton(onClick = onRetryUplink) {
+                        Text(if (gatewayState.isConnected) "🟢" else "🔴", fontSize = 14.sp)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
@@ -198,34 +221,98 @@ fun MainScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Status Card
+            // Live Government Alert Banner (from Command Grid)
+            if (gatewayState.isEmergencyActiveFromGov) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFB71C1C))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🚨", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "GOVERNMENT DISASTER ALERT",
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = gatewayState.alertHeadline,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Yellow,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = gatewayState.alertInstructions,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Command Grid Uplink Status Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isServiceBound) Color(0xFF1B5E20).copy(alpha = 0.2f) else Color(0xFFB71C1C).copy(alpha = 0.2f)
+                    containerColor = if (gatewayState.isConnected) Color(0xFF0D47A1).copy(alpha = 0.15f) else Color.DarkGray.copy(alpha = 0.15f)
                 )
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = if (isServiceBound) "BLE MESH ENGINE ACTIVE" else "STANDBY / OFFLINE MESH READY",
-                        fontWeight = FontWeight.Bold,
-                        color = if (isServiceBound) Color(0xFF4CAF50) else Color(0xFFFF5252),
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (isServiceBound)
-                            "Transmitting and relaying SOS beacons via Bluetooth Low Energy."
-                        else
-                            "Start mesh engine to join offline delay-tolerant disaster network.",
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (gatewayState.isConnected) Color(0xFF29B6F6) else Color.Gray)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (gatewayState.isConnected) "COMMAND GRID UPLINK ACTIVE" else "UPLINK GATEWAY SEARCHING...",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (gatewayState.isConnected) Color(0xFF29B6F6) else Color.Gray
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (gatewayState.isConnected)
+                                "Connected: ${gatewayState.serverHost}:${gatewayState.serverPort} (${gatewayState.latencyMs}ms)"
+                            else
+                                "Auto-detecting Mac Command Center (port ${gatewayState.serverPort})",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color.Gray
+                        )
+                    }
+
+                    if (!gatewayState.isConnected) {
+                        Button(
+                            onClick = onRetryUplink,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Retry", fontSize = 11.sp)
+                        }
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // BIG RED SOS PANIC BUTTON
             Button(
@@ -244,16 +331,16 @@ fun MainScreen(
                         color = Color.White
                     )
                     Text(
-                        "Multi-hop BLE • No Internet Needed",
+                        "Relays via BLE Mesh + Command Grid Uplink",
                         fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.8f)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Service Toggle Button
+            // Service Controls
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = if (isServiceBound) onStopService else onStartService,
@@ -262,11 +349,11 @@ fun MainScreen(
                         containerColor = if (isServiceBound) Color.DarkGray else MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text(if (isServiceBound) "Stop Mesh" else "Start Mesh")
+                    Text(if (isServiceBound) "Stop BLE Mesh" else "Start BLE Mesh")
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Packet Log Header
             Row(
@@ -274,11 +361,11 @@ fun MainScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Mesh Packet Telemetry", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Local Telemetry Stream", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Text("${receivedPackets.size} Relayed", fontSize = 12.sp, color = Color.Gray)
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (receivedPackets.isEmpty()) {
                 Box(
@@ -287,7 +374,11 @@ fun MainScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No BLE packets detected yet.\nTap 'Broadcast SOS Beacon' to transmit.", color = Color.Gray, fontSize = 13.sp)
+                    Text(
+                        "No BLE mesh packets recorded.\nTap 'Broadcast SOS Beacon' to transmit.",
+                        color = Color.Gray,
+                        fontSize = 13.sp
+                    )
                 }
             } else {
                 LazyColumn(
@@ -316,7 +407,7 @@ fun PacketCard(packet: GarudaPacket) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    "Packet ID: 0x${Integer.toHexString(packet.packetId).uppercase()}",
+                    "Packet: 0x${Integer.toHexString(packet.packetId).uppercase()}",
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp

@@ -37,7 +37,7 @@ public struct MainAppView: View {
             .navigationTitle("Garuda Command Grid")
             .listStyle(.sidebar)
             
-            // Sidebar Footer Alert Status
+            // Sidebar Footer Alert Status & Live Uplink Status
             VStack(alignment: .leading, spacing: 6) {
                 Divider()
                 HStack {
@@ -51,6 +51,21 @@ public struct MainAppView: View {
                 Text(store.activeDistrict)
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                
+                Divider()
+                
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(store.isServerRunning ? Color.blue : Color.gray)
+                        .frame(width: 6, height: 6)
+                    Text("Gateway Server: Port \(store.serverPort)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                
+                Text("\(store.connectedClientsCount) Mobile Gateway(s) Linked")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(store.connectedClientsCount > 0 ? .green : .secondary)
             }
             .padding(12)
         } detail: {

@@ -3,7 +3,7 @@ import SwiftUI
 import Combine
 
 @MainActor
-public final class CommandCenterStore: ObservableObject {
+public final class CommandCenterStore: ObservableObject, CommandGridServerDelegate {
     @Published public var signals: [SosSignal] = []
     @Published public var alerts: [DisasterAlert] = []
     @Published public var hazards: [HazardReport] = []
@@ -11,11 +11,57 @@ public final class CommandCenterStore: ObservableObject {
     @Published public var isEmergencyBroadcastActive: Bool = true
     @Published public var activeDistrict: String = "Wayanad / Kerala Region"
     @Published public var isSimulatingMeshArrivals: Bool = false
+    @Published public var connectedClientsCount: Int = 0
+    @Published public var serverPort: UInt16 = 8080
+    @Published public var isServerRunning: Bool = false
     
     private var simulationTimer: AnyCancellable?
     
     public init() {
         loadMockData()
+        setupLiveServer()
+    }
+    
+    private func setupLiveServer() {
+        let server = CommandGridServer.shared
+        server.delegate = self
+        server.currentAlertProvider = { [weak self] in
+            self?.alerts.first
+        }
+        server.start(port: 8080)
+        isServerRunning = server.isRunning
+        serverPort = server.port
+    }
+    
+    // MARK: - CommandGridServerDelegate
+    public func serverDidReceiveSosSignal(_ signal: SosSignal) {
+        withAnimation(.spring()) {
+            // Deduplicate by ID if already present
+            if let index = signals.firstIndex(where: { $0.id == signal.id }) {
+                signals[index] = signal
+            } else {
+                signals.insert(signal, at: 0)
+            }
+            selectedSignal = signal
+        }
+    }
+    
+    public func serverDidReceiveHazardReport(_ hazard: HazardReport) {
+        withAnimation(.spring()) {
+            hazards.insert(hazard, at: 0)
+        }
+    }
+    
+    public func serverClientConnected(address: String) {
+        withAnimation {
+            connectedClientsCount += 1
+        }
+    }
+    
+    public func serverClientDisconnected(address: String) {
+        withAnimation {
+            connectedClientsCount = max(0, connectedClientsCount - 1)
+        }
     }
     
     public var criticalCount: Int {
@@ -62,6 +108,18 @@ public final class CommandCenterStore: ObservableObject {
         alerts.insert(newAlert, at: 0)
         isEmergencyBroadcastActive = true
         activeDistrict = district
+        
+        // Broadcast over live SSE network to all connected Android citizen phones
+        CommandGridServer.shared.broadcastSseEvent(
+            event: "emergency_activated",
+            data: [
+                "title": title,
+                "severity": severity,
+                "district": district,
+                "instructions": instructions,
+                "timestamp": Date().timeIntervalSince1970
+            ]
+        )
     }
     
     public func toggleSimulation() {
