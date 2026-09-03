@@ -4,7 +4,7 @@ public struct TestRunner {
     @MainActor
     public static func runAllTests() -> Bool {
         print("========================================")
-        print("  GARUDA COMMAND CENTER TEST SUITE")
+        print("    GARUDA COMMAND GRID TEST SUITE")
         print("========================================")
         
         var passed = 0

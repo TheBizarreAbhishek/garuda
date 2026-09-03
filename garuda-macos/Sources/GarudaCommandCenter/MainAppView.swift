@@ -34,7 +34,7 @@ public struct MainAppView: View {
                         .font(.headline)
                 }
             }
-            .navigationTitle("Garuda Drishti")
+            .navigationTitle("Garuda Command Grid")
             .listStyle(.sidebar)
             
             // Sidebar Footer Alert Status
