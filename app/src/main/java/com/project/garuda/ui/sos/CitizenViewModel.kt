@@ -302,7 +302,7 @@ class CitizenViewModel(
                 } catch (e: Exception) {
                     Log.v(TAG, "Heartbeat broadcast failed", e)
                 }
-                delay(3000) // Periodic 3s BLE presence beacon for active nearby peer discovery
+                delay(2000) // Periodic 2s BLE presence beacon for stable active nearby peer discovery
             }
         }
     }

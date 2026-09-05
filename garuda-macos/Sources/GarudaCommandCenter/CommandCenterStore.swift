@@ -3,7 +3,7 @@ import SwiftUI
 import Combine
 
 @MainActor
-public final class CommandCenterStore: ObservableObject, CommandGridServerDelegate {
+public final class CommandCenterStore: ObservableObject, CommandGridServerDelegate, BleMeshReceiverDelegate {
     @Published public var signals: [SosSignal] = []
     @Published public var alerts: [DisasterAlert] = []
     @Published public var hazards: [HazardReport] = []
@@ -28,9 +28,12 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     
     public init() {
         // Pure Real Data Mode: No mock data loaded on startup.
-        // Data is populated live from connected mobile devices via CommandGridServer (SSE / :8080)
-        // and Firebase Firestore cloud listener.
+        // Data is populated live from connected mobile devices via:
+        // 1. Direct CoreBluetooth BLE Mesh (Zero-Internet / Offline)
+        // 2. CommandGridServer (Local Wi-Fi / Hotspot SSE :8080)
+        // 3. Firebase Firestore cloud listener (Online Cloud Sync)
         setupLiveServer()
+        setupLiveBleMeshReceiver()
         setupLiveFirebaseCloud()
     }
     
@@ -43,6 +46,12 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         server.start(port: 8080)
         isServerRunning = server.isRunning
         serverPort = server.port
+    }
+    
+    private func setupLiveBleMeshReceiver() {
+        let bleMesh = BleMeshReceiver.shared
+        bleMesh.delegate = self
+        bleMesh.start()
     }
     
     private func setupLiveFirebaseCloud() {
@@ -65,8 +74,17 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         } onDevicesReceived: { [weak self] devices in
             guard let self = self else { return }
             withAnimation(.easeInOut) {
-                self.activeDevices = devices
-                self.connectedClientsCount = devices.count
+                // Merge cloud devices with existing active BLE mesh devices
+                var merged = self.activeDevices.filter { !$0.isDirectCloud }
+                for dev in devices {
+                    if let idx = merged.firstIndex(where: { $0.id == dev.id }) {
+                        merged[idx] = dev
+                    } else {
+                        merged.append(dev)
+                    }
+                }
+                self.activeDevices = merged
+                self.connectedClientsCount = merged.count
             }
         } onSheltersReceived: { [weak self] cloudShelters in
             guard let self = self else { return }
@@ -79,6 +97,41 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                     }
                 }
             }
+        }
+    }
+    
+    // MARK: - BleMeshReceiverDelegate (Offline Zero-Internet Direct BLE Mesh)
+    public func bleMeshDidReceiveSosSignal(_ signal: SosSignal) {
+        withAnimation(.spring()) {
+            if let index = signals.firstIndex(where: { $0.id == signal.id }) {
+                signals[index] = signal
+            } else {
+                signals.insert(signal, at: 0)
+            }
+            selectedSignal = signal
+        }
+    }
+    
+    public func bleMeshDidDiscoverNode(device: ConnectedDevice) {
+        withAnimation(.easeInOut) {
+            if let idx = activeDevices.firstIndex(where: { $0.id == device.id }) {
+                activeDevices[idx] = device
+            } else {
+                activeDevices.append(device)
+            }
+            connectedClientsCount = activeDevices.count
+        }
+    }
+    
+    public func bleMeshDidReceiveHazard(_ hazard: HazardReport) {
+        withAnimation(.spring()) {
+            hazards.insert(hazard, at: 0)
+        }
+    }
+    
+    public func bleMeshActiveNodesUpdated(count: Int) {
+        withAnimation {
+            connectedClientsCount = max(count, activeDevices.count)
         }
     }
     

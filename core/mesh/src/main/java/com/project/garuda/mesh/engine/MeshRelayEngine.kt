@@ -32,7 +32,7 @@ class MeshRelayEngine(
         const val LRU_CACHE_CAPACITY = 500
         const val JITTER_MIN_MS = 100L
         const val JITTER_MAX_MS = 600L
-        const val ACTIVE_PEER_TIMEOUT_MS = 10000L // 10s sliding window for active nearby presence
+        const val ACTIVE_PEER_TIMEOUT_MS = 25000L // 25s sliding window prevents momentary RF packet drop dips
     }
 
     // LRU Cache for packet deduplication

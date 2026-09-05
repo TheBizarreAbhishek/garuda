@@ -1,7 +1,7 @@
 import Foundation
 import CoreLocation
 
-public enum EmergencyType: String, Codable, Hashable, CaseIterable, Identifiable {
+public enum EmergencyType: String, Codable, Hashable, CaseIterable, Identifiable, Sendable {
     case trapped = "Trapped under Debris"
     case medical = "Medical Emergency"
     case flood = "Flash Flood / Drowning"
@@ -23,7 +23,7 @@ public enum EmergencyType: String, Codable, Hashable, CaseIterable, Identifiable
     }
 }
 
-public enum TriagePriority: String, Codable, Hashable, CaseIterable, Comparable {
+public enum TriagePriority: String, Codable, Hashable, CaseIterable, Comparable, Sendable {
     case critical = "CRITICAL (Red)"
     case urgent = "URGENT (Orange)"
     case moderate = "MODERATE (Yellow)"
@@ -43,7 +43,7 @@ public enum TriagePriority: String, Codable, Hashable, CaseIterable, Comparable 
     }
 }
 
-public enum RescueStatus: String, Codable, Hashable, CaseIterable, Identifiable {
+public enum RescueStatus: String, Codable, Hashable, CaseIterable, Identifiable, Sendable {
     case pending = "Pending Triage"
     case dispatched = "NDRF Dispatched"
     case inProgress = "Rescue In Progress"
@@ -52,7 +52,7 @@ public enum RescueStatus: String, Codable, Hashable, CaseIterable, Identifiable 
     public var id: String { rawValue }
 }
 
-public struct SosSignal: Identifiable, Codable, Hashable {
+public struct SosSignal: Identifiable, Codable, Hashable, Sendable {
     public let id: String
     public var victimName: String
     public var bloodGroup: String
@@ -113,7 +113,7 @@ public struct SosSignal: Identifiable, Codable, Hashable {
     }
 }
 
-public struct DisasterAlert: Identifiable, Codable, Hashable {
+public struct DisasterAlert: Identifiable, Codable, Hashable, Sendable {
     public let id: String
     public var title: String
     public var severity: String
@@ -141,7 +141,7 @@ public struct DisasterAlert: Identifiable, Codable, Hashable {
     }
 }
 
-public enum HazardStatus: String, Codable, CaseIterable, Identifiable {
+public enum HazardStatus: String, Codable, CaseIterable, Identifiable, Sendable {
     case unverified = "Pending Review"
     case roadBlocked = "Verified: Road Blocked"
     case verifiedActive = "Verified Hazard"
@@ -151,7 +151,7 @@ public enum HazardStatus: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
-public struct HazardReport: Identifiable, Codable, Hashable {
+public struct HazardReport: Identifiable, Codable, Hashable, Sendable {
     public let id: String
     public var title: String
     public var category: String
@@ -201,7 +201,7 @@ public struct HazardReport: Identifiable, Codable, Hashable {
     }
 }
 
-public struct ConnectedDevice: Identifiable, Codable, Hashable {
+public struct ConnectedDevice: Identifiable, Codable, Hashable, Sendable {
     public let id: String
     public var name: String
     public var batteryLevel: Int
@@ -259,7 +259,7 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
     }
 }
 
-public struct PushNotificationRecord: Identifiable, Codable, Hashable {
+public struct PushNotificationRecord: Identifiable, Codable, Hashable, Sendable {
     public let id: String
     public let title: String
     public let message: String
@@ -287,7 +287,7 @@ public struct PushNotificationRecord: Identifiable, Codable, Hashable {
     }
 }
 
-public enum SatelliteMapLayerMode: String, CaseIterable, Identifiable {
+public enum SatelliteMapLayerMode: String, CaseIterable, Identifiable, Sendable {
     case standardHybrid = "3D Hybrid Satellite"
     case isroBhuvan = "ISRO Bhuvan NDEM GIS"
     case imdDopplerRadar = "IMD INSAT-3DS Live Radar"
@@ -311,7 +311,7 @@ public enum SatelliteMapLayerMode: String, CaseIterable, Identifiable {
     }
 }
 
-public struct ReliefShelter: Identifiable, Hashable, Codable {
+public struct ReliefShelter: Identifiable, Hashable, Codable, Sendable {
     public let id: String
     public let name: String
     public let latitude: Double
@@ -346,7 +346,7 @@ public struct ReliefShelter: Identifiable, Hashable, Codable {
     }
 }
 
-public struct NdrfRescueUnit: Identifiable, Hashable, Codable {
+public struct NdrfRescueUnit: Identifiable, Hashable, Codable, Sendable {
     public let id: String
     public let unitName: String
     public let battalion: String
