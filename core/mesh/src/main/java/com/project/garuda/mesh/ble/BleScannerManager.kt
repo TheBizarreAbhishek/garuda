@@ -21,7 +21,7 @@ class BleScannerManager(private val context: Context) {
 
     private var bluetoothLeScanner: BluetoothLeScanner? = null
     private var isScanning = false
-    private var onPacketReceivedCallback: ((ByteArray) -> Unit)? = null
+    private var onPacketReceivedCallback: ((deviceAddress: String, rawBytes: ByteArray) -> Unit)? = null
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
@@ -29,8 +29,9 @@ class BleScannerManager(private val context: Context) {
             val record = result?.scanRecord ?: return
             val manufacturerData = record.getManufacturerSpecificData(BleAdvertiserManager.MANUFACTURER_ID)
                 ?: return
+            val deviceAddress = result.device?.address ?: ""
 
-            onPacketReceivedCallback?.invoke(manufacturerData)
+            onPacketReceivedCallback?.invoke(deviceAddress, manufacturerData)
         }
 
         override fun onBatchScanResults(results: MutableList<ScanResult>?) {
@@ -39,7 +40,8 @@ class BleScannerManager(private val context: Context) {
                 val record = result.scanRecord ?: return@forEach
                 val manufacturerData = record.getManufacturerSpecificData(BleAdvertiserManager.MANUFACTURER_ID)
                     ?: return@forEach
-                onPacketReceivedCallback?.invoke(manufacturerData)
+                val deviceAddress = result.device?.address ?: ""
+                onPacketReceivedCallback?.invoke(deviceAddress, manufacturerData)
             }
         }
 
@@ -58,7 +60,7 @@ class BleScannerManager(private val context: Context) {
     /**
      * Starts listening for Garuda BLE mesh broadcast packets.
      */
-    fun startScanning(onPacketReceived: (ByteArray) -> Unit) {
+    fun startScanning(onPacketReceived: (deviceAddress: String, rawBytes: ByteArray) -> Unit) {
         val scanner = bluetoothLeScanner ?: run {
             Log.e(TAG, "BluetoothLeScanner is unavailable on this device")
             return

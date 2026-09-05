@@ -92,16 +92,16 @@ class MeshForegroundService : Service() {
         when (mode) {
             DutyCycleMode.HIGH_ALERT -> {
                 // Continuous scanning
-                scannerManager.startScanning { rawBytes ->
-                    meshRelayEngine.processIncomingRawBytes(rawBytes)
+                scannerManager.startScanning { deviceAddress, rawBytes ->
+                    meshRelayEngine.processIncomingRawBytes(deviceAddress, rawBytes)
                 }
             }
             DutyCycleMode.BACKGROUND_STANDBY -> {
                 // Duty-cycled scanning: 5s active scan / 25s idle
                 dutyCycleJob = serviceScope.launch {
                     while (isActive) {
-                        scannerManager.startScanning { rawBytes ->
-                            meshRelayEngine.processIncomingRawBytes(rawBytes)
+                        scannerManager.startScanning { deviceAddress, rawBytes ->
+                            meshRelayEngine.processIncomingRawBytes(deviceAddress, rawBytes)
                         }
                         delay(STANDBY_SCAN_DURATION_MS)
 

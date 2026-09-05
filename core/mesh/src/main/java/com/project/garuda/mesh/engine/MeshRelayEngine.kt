@@ -39,8 +39,21 @@ class MeshRelayEngine(
         }
     }
 
+    // Active nearby peers map: deviceHash -> lastSeenTimestampMs
+    private val activePeersMap = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+
     private val _incomingPackets = MutableSharedFlow<GarudaPacket>(extraBufferCapacity = 64)
     val incomingPackets: SharedFlow<GarudaPacket> = _incomingPackets.asSharedFlow()
+
+    /**
+     * Processes an incoming raw binary BLE packet with device hardware address.
+     */
+    fun processIncomingRawBytes(deviceAddress: String, rawBytes: ByteArray) {
+        if (deviceAddress.isNotEmpty()) {
+            activePeersMap[deviceAddress.hashCode()] = System.currentTimeMillis()
+        }
+        processIncomingRawBytes(rawBytes)
+    }
 
     /**
      * Processes an incoming raw binary BLE packet.
@@ -55,10 +68,16 @@ class MeshRelayEngine(
      */
     @Synchronized
     fun processIncomingPacket(packet: GarudaPacket) {
+        // Record active peer device hash timestamp
+        if (packet.deviceHash != 0) {
+            activePeersMap[packet.deviceHash] = System.currentTimeMillis()
+        }
+
         // 1. Deduplication check using LRU Cache
         if (seenPacketIds.containsKey(packet.packetId)) {
             return // Ignore duplicate packet
         }
+
 
         // 2. Mark packet as seen
         seenPacketIds[packet.packetId] = true
@@ -119,5 +138,15 @@ class MeshRelayEngine(
     @Synchronized
     fun clearCache() {
         seenPacketIds.clear()
+    }
+
+    /**
+     * Returns the count of active unique mesh peer devices seen within the last [windowMs].
+     */
+    @Synchronized
+    fun getActivePeerCount(windowMs: Long = 30000L): Int {
+        val now = System.currentTimeMillis()
+        activePeersMap.entries.removeIf { now - it.value > windowMs }
+        return activePeersMap.size
     }
 }
