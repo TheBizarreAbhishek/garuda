@@ -124,6 +124,21 @@ class CitizenViewModel(
                             )
                         }
 
+                        // 🌐 EDGE GATEWAY RELAY TO CLOUD: If this phone has Internet, relay ONLY offline mesh peers (who do not have direct internet)
+                        val isPeerDirectOnline = (packet.emergencyType == 0x7F.toByte())
+                        if (firebaseGateway.syncState.value.isConnected && 
+                            packet.deviceHash != 0 && 
+                            packet.deviceHash != localDeviceHash && 
+                            !isPeerDirectOnline) {
+                            viewModelScope.launch {
+                                firebaseGateway.uploadMeshPeerToFirestore(
+                                    peerHash = packet.deviceHash,
+                                    latitude = packet.latitude,
+                                    longitude = packet.longitude,
+                                    hopCount = packet.hopCount.coerceAtLeast(1)
+                                )
+                            }
+                        }
 
                         // 🚨 Emergency Declaration Relayed via BLE Mesh from other peer nodes
                         if (packet.packetType == GarudaPacket.TYPE_EMERGENCY_BROADCAST || 
