@@ -28,10 +28,12 @@ class BleScannerManager(private val context: Context) {
             super.onScanResult(callbackType, result)
             val record = result?.scanRecord ?: return
             val manufacturerData = record.getManufacturerSpecificData(BleAdvertiserManager.MANUFACTURER_ID)
-                ?: return
-            val deviceAddress = result.device?.address ?: ""
-
-            onPacketReceivedCallback?.invoke(deviceAddress, manufacturerData)
+            
+            if (manufacturerData != null) {
+                val deviceAddress = result.device?.address ?: ""
+                Log.d(TAG, ">>> RECEIVED GARUDA PACKET from $deviceAddress (${manufacturerData.size} bytes)")
+                onPacketReceivedCallback?.invoke(deviceAddress, manufacturerData)
+            }
         }
 
         override fun onBatchScanResults(results: MutableList<ScanResult>?) {
@@ -41,6 +43,7 @@ class BleScannerManager(private val context: Context) {
                 val manufacturerData = record.getManufacturerSpecificData(BleAdvertiserManager.MANUFACTURER_ID)
                     ?: return@forEach
                 val deviceAddress = result.device?.address ?: ""
+                Log.d(TAG, ">>> RECEIVED BATCH GARUDA PACKET from $deviceAddress (${manufacturerData.size} bytes)")
                 onPacketReceivedCallback?.invoke(deviceAddress, manufacturerData)
             }
         }
@@ -71,19 +74,19 @@ class BleScannerManager(private val context: Context) {
 
         this.onPacketReceivedCallback = onPacketReceived
 
-        // Use empty scan filters to ensure broad compatibility across all chipsets (Samsung/Qualcomm/MediaTek)
-        // Software filtering on 0x4744 is performed in onScanResult
-        val filters = emptyList<ScanFilter>()
-
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
             .setReportDelay(0)
             .build()
 
         try {
-            scanner.startScan(filters, settings, scanCallback)
+            // Passing null for filters ensures all BLE advertisements are received without hardware driver filtering bugs
+            scanner.startScan(null, settings, scanCallback)
             isScanning = true
-            Log.d(TAG, "BLE Mesh Scanner started successfully")
+            Log.d(TAG, "BLE Mesh Scanner started successfully in AGGRESSIVE mode")
         } catch (e: SecurityException) {
             Log.e(TAG, "Missing Bluetooth permissions to start scanning", e)
         } catch (e: Exception) {

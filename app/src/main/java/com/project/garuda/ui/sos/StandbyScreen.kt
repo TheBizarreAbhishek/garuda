@@ -109,18 +109,16 @@ fun StandbyScreen(
                     )
                 }
 
-                // Status Badge
-                val isGovEmergencyDeclared = state.pendingGovAlert != null
+                // Status Badge: Real-time Live BLE Mesh Peer Count
                 val peerCount = state.meshStatus.peersNearby
-                val badgeText = if (isGovEmergencyDeclared) "Peer: $peerCount" else "Standby Mode"
-                val badgeColor = if (isGovEmergencyDeclared) AmberAlert else SafeGreen
-                val badgeContainer = if (isGovEmergencyDeclared) AmberAlertContainer else SafeGreenContainer
+                val peerColor = if (peerCount > 0) SafeGreen else AmberAlert
+                val peerContainer = if (peerCount > 0) SafeGreenContainer else AmberAlertContainer
 
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(badgeContainer)
-                        .border(1.dp, badgeColor, RoundedCornerShape(20.dp))
+                        .background(peerContainer)
+                        .border(1.dp, peerColor, RoundedCornerShape(20.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -128,12 +126,12 @@ fun StandbyScreen(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(badgeColor)
+                                .background(peerColor)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = badgeText,
-                            color = badgeColor,
+                            text = if (peerCount > 0) "Peers: $peerCount" else "Mesh Active (0 Peer)",
+                            color = peerColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
