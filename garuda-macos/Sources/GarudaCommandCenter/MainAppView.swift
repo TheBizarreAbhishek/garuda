@@ -4,6 +4,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
     case liveMap = "Live GIS Map"
     case triageKanban = "Triage & Rescue"
     case emergencyBroadcast = "Emergency Broadcast"
+    case imdRadar = "IMD Satellite Radar"
     case hazardReports = "Hazard Reports"
     case meshTelemetry = "Mesh Telemetry"
     
@@ -14,6 +15,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .liveMap: return "map.fill"
         case .triageKanban: return "square.grid.3x2.fill"
         case .emergencyBroadcast: return "antenna.radiowaves.left.and.right"
+        case .imdRadar: return "satellite.fill"
         case .hazardReports: return "exclamationmark.triangle.fill"
         case .meshTelemetry: return "waveform.path.ecg"
         }
@@ -91,6 +93,10 @@ public struct MainAppView: View {
                                         .fill(Color.red)
                                         .frame(width: 8, height: 8)
                                 }
+                            case .imdRadar:
+                                Circle()
+                                    .fill(Color.cyan)
+                                    .frame(width: 6, height: 6)
                             case .meshTelemetry:
                                 if store.activeDevices.count > 0 {
                                     Circle()
@@ -195,6 +201,8 @@ public struct MainAppView: View {
                     TriageKanbanView(store: store)
                 case .emergencyBroadcast:
                     EmergencyBroadcasterView(store: store)
+                case .imdRadar:
+                    ImdSatelliteRadarView(store: store)
                 case .hazardReports:
                     HazardGalleryView(store: store)
                 case .meshTelemetry:
