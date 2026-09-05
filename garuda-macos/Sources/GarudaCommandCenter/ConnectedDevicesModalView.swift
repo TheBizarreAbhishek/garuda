@@ -4,21 +4,40 @@ public struct ConnectedDevicesModalView: View {
     @ObservedObject var store: CommandCenterStore
     @Environment(\.dismiss) private var dismiss
     @State private var searchText: String = ""
+    @State private var selectedFilter: ConnectionFilter = .all
+    
+    enum ConnectionFilter: String, CaseIterable, Identifiable {
+        case all = "All Nodes"
+        case directCloud = "Direct Cloud 🌐"
+        case meshRelay = "BLE Mesh 📡"
+        
+        var id: String { rawValue }
+    }
     
     public init(store: CommandCenterStore) {
         self.store = store
     }
     
     private var filteredDevices: [ConnectedDevice] {
-        if searchText.isEmpty {
-            return store.activeDevices
-        } else {
-            return store.activeDevices.filter {
+        var list = store.activeDevices
+        
+        switch selectedFilter {
+        case .all:
+            break
+        case .directCloud:
+            list = list.filter { $0.isDirectCloud }
+        case .meshRelay:
+            list = list.filter { !$0.isDirectCloud }
+        }
+        
+        if !searchText.isEmpty {
+            list = list.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
                 $0.id.localizedCaseInsensitiveContains(searchText) ||
                 $0.location.localizedCaseInsensitiveContains(searchText)
             }
         }
+        return list
     }
     
     public var body: some View {
@@ -28,12 +47,12 @@ public struct ConnectedDevicesModalView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.title2.bold())
-                        .foregroundColor(.green)
+                        .foregroundColor(.cyan)
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Connected Devices & Mesh Gateways")
+                        Text("Connected Devices & Mesh Network Registry")
                             .font(.headline.bold())
-                        Text("Live Cloud & BLE Mesh Registry • Firebase (garuda-2aba2)")
+                        Text("Live Cloud & BLE Multi-Hop Ground Grid • Firebase (garuda-2aba2)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -41,20 +60,30 @@ public struct ConnectedDevicesModalView: View {
                 
                 Spacer()
                 
-                // Count Badge
+                // Dual Count Badges
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(store.activeDevices.isEmpty ? Color.orange : Color.green)
-                        .frame(width: 8, height: 8)
-                    Text("\(store.activeDevices.count) Online Node(s)")
-                        .font(.caption.bold())
-                        .foregroundColor(store.activeDevices.isEmpty ? .orange : .green)
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                        Text("\(store.directCloudDevicesCount) Cloud")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.green)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(Capsule())
+                    
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.cyan).frame(width: 7, height: 7)
+                        Text("\(store.meshRelayDevicesCount) Mesh")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.cyan)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.cyan.opacity(0.12))
+                    .clipShape(Capsule())
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.black.opacity(0.3))
-                .cornerRadius(20)
-                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 1))
                 
                 Button {
                     dismiss()
@@ -71,39 +100,49 @@ public struct ConnectedDevicesModalView: View {
             
             Divider()
             
-            // Search / Filter
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                TextField("Search connected devices by model, ID or district...", text: $searchText)
-                    .textFieldStyle(.plain)
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
+            // Search Bar + Segmented Filter
+            VStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search connected devices by model, ID or district...", text: $searchText)
+                        .textFieldStyle(.plain)
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(8)
+                .background(Color.black.opacity(0.2))
+                .cornerRadius(8)
+                
+                // Segmented Picker
+                Picker("Filter", selection: $selectedFilter) {
+                    Text("All (\(store.activeDevices.count))").tag(ConnectionFilter.all)
+                    Text("Direct Cloud (\(store.directCloudDevicesCount))").tag(ConnectionFilter.directCloud)
+                    Text("BLE Mesh Relay (\(store.meshRelayDevicesCount))").tag(ConnectionFilter.meshRelay)
+                }
+                .pickerStyle(.segmented)
             }
-            .padding(10)
-            .background(Color.black.opacity(0.2))
-            .cornerRadius(8)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             
             // Devices Grid / List
-            if store.activeDevices.isEmpty {
+            if filteredDevices.isEmpty {
                 VStack(spacing: 12) {
                     Spacer()
                     Image(systemName: "iphone.slash")
                         .font(.system(size: 44))
                         .foregroundColor(.secondary)
-                    Text("No Devices Connected Yet")
+                    Text("No Matching Devices Found")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("Open the Garuda app on your Android phone to register as an active mesh node.")
+                    Text("Devices appear here live as they register via Cloud or relay over BLE multi-hop mesh.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -137,7 +176,7 @@ public struct ConnectedDevicesModalView: View {
             .padding(12)
             .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(minWidth: 580, idealWidth: 620, minHeight: 420, idealHeight: 480)
+        .frame(minWidth: 620, idealWidth: 660, minHeight: 460, idealHeight: 520)
     }
 }
 
@@ -149,11 +188,11 @@ struct DeviceCard: View {
             // Device Icon
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.green.opacity(0.15))
+                    .fill((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.15))
                     .frame(width: 50, height: 50)
-                Image(systemName: "iphone.gen3")
+                Image(systemName: device.isDirectCloud ? "network" : "antenna.radiowaves.left.and.right")
                     .font(.title2)
-                    .foregroundColor(.green)
+                    .foregroundColor(device.isDirectCloud ? .green : .cyan)
             }
             
             // Details
@@ -163,12 +202,12 @@ struct DeviceCard: View {
                         .font(.system(size: 14, weight: .bold))
                     
                     Circle()
-                        .fill(Color.green)
+                        .fill(device.isDirectCloud ? Color.green : Color.cyan)
                         .frame(width: 7, height: 7)
                     
                     Text("ONLINE")
                         .font(.system(size: 9, weight: .heavy))
-                        .foregroundColor(.green)
+                        .foregroundColor(device.isDirectCloud ? .green : .cyan)
                 }
                 
                 HStack(spacing: 8) {
@@ -187,24 +226,27 @@ struct DeviceCard: View {
                 if device.latitude != 0.0 && device.longitude != 0.0 {
                     Text("🛰️ GPS: \(String(format: "%.4f", device.latitude))°N, \(String(format: "%.4f", device.longitude))°E")
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.blue.opacity(0.9))
+                        .foregroundColor(.cyan.opacity(0.9))
                 }
                 
                 HStack(spacing: 6) {
+                    // Connection Channel Badge
+                    HStack(spacing: 4) {
+                        Text(device.isDirectCloud ? "🌐 DIRECT CLOUD" : "📡 MESH RELAY")
+                            .font(.system(size: 9, weight: .black, design: .monospaced))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.18))
+                    .foregroundColor(device.isDirectCloud ? .green : .cyan)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    
                     Text(device.meshRole)
                         .font(.system(size: 10, weight: .semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.2))
-                        .foregroundColor(.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    
-                    Text("Live Uplink Active")
-                        .font(.system(size: 10, weight: .medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.purple.opacity(0.2))
-                        .foregroundColor(.purple)
+                        .background(Color.white.opacity(0.08))
+                        .foregroundColor(.secondary)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
             }
@@ -231,7 +273,7 @@ struct DeviceCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.18), lineWidth: 1)
         )
     }
     

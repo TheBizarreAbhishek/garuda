@@ -118,6 +118,14 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         signals.filter { $0.status != .rescued }.count
     }
     
+    public var directCloudDevicesCount: Int {
+        activeDevices.filter { $0.isDirectCloud }.count
+    }
+    
+    public var meshRelayDevicesCount: Int {
+        activeDevices.filter { !$0.isDirectCloud }.count
+    }
+    
     public func updateSignalStatus(id: String, newStatus: RescueStatus, assignedUnit: String? = nil) {
         if let index = signals.firstIndex(where: { $0.id == id }) {
             signals[index].status = newStatus

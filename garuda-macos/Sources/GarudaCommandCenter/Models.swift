@@ -190,6 +190,16 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
     public var longitude: Double
     public var lastSeen: Date
     public var isOnline: Bool
+    public var connectionType: String
+    public var hopCount: Int
+    
+    public var isDirectCloud: Bool {
+        connectionType.uppercased().contains("CLOUD") || 
+        connectionType.uppercased().contains("DIRECT") || 
+        connectionType.uppercased().contains("INTERNET") ||
+        meshRole.localizedCaseInsensitiveContains("Gateway") ||
+        hopCount == 0
+    }
     
     public var coordinate: CLLocationCoordinate2D? {
         if latitude != 0.0 && longitude != 0.0 {
@@ -208,7 +218,9 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
         latitude: Double = 0.0,
         longitude: Double = 0.0,
         lastSeen: Date = Date(),
-        isOnline: Bool = true
+        isOnline: Bool = true,
+        connectionType: String = "CLOUD_DIRECT",
+        hopCount: Int = 0
     ) {
         self.id = id
         self.name = name
@@ -220,6 +232,8 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
         self.longitude = longitude
         self.lastSeen = lastSeen
         self.isOnline = isOnline
+        self.connectionType = connectionType
+        self.hopCount = hopCount
     }
 }
 

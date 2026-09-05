@@ -75,14 +75,20 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                     let role = (fields["meshRole"] as? [String: Any])?["stringValue"] as? String ?? "Relay Node"
                     let battery = Int((fields["batteryLevel"] as? [String: Any])?["integerValue"] as? String ?? "80") ?? 80
                     let loc = (fields["location"] as? [String: Any])?["stringValue"] as? String ?? "GPS Locating..."
-                    let lat = (fields["latitude"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0
-                    let lon = (fields["longitude"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0
-                    let lastSeenEpoch = Double((fields["lastSeen"] as? [String: Any])?["integerValue"] as? String ?? "0") ?? 0
+                    let lat = (fields["latitude"] as? [String: Any])?["doubleValue"] as? Double 
+                        ?? Double((fields["latitude"] as? [String: Any])?["integerValue"] as? String ?? "") ?? 0.0
+                    let lon = (fields["longitude"] as? [String: Any])?["doubleValue"] as? Double 
+                        ?? Double((fields["longitude"] as? [String: Any])?["integerValue"] as? String ?? "") ?? 0.0
+                    let lastSeenEpoch = Double((fields["lastSeen"] as? [String: Any])?["integerValue"] as? String ?? "")
+                        ?? Double((fields["lastSeen"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0)
+                    
+                    let connType = (fields["connectionType"] as? [String: Any])?["stringValue"] as? String ?? "CLOUD_DIRECT"
+                    let hops = Int((fields["hopCount"] as? [String: Any])?["integerValue"] as? String ?? "0") ?? 0
                     
                     let timeSinceLastHeartbeat = now - lastSeenEpoch
                     
-                    // REAL-TIME HEARTBEAT TTL: Only devices active within the last 10 seconds are online!
-                    if timeSinceLastHeartbeat <= 10.0 {
+                    // REAL-TIME HEARTBEAT TTL: Devices active within the last 45 seconds are online!
+                    if timeSinceLastHeartbeat <= 45.0 {
                         let dev = ConnectedDevice(
                             id: docId,
                             name: devName,
@@ -93,7 +99,9 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                             latitude: lat,
                             longitude: lon,
                             lastSeen: Date(timeIntervalSince1970: lastSeenEpoch),
-                            isOnline: true
+                            isOnline: true,
+                            connectionType: connType,
+                            hopCount: hops
                         )
                         devices.append(dev)
                     } else {

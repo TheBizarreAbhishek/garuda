@@ -15,10 +15,13 @@ public struct LiveMapView: View {
     // UI HUD Controls
     @State private var showShelters: Bool = true
     @State private var showNdrfUnits: Bool = true
+    @State private var showActiveDevices: Bool = true
+    @State private var showPopulationHeatmap: Bool = true
     @State private var showMeshHops: Bool = true
     @State private var showWeatherDrawer: Bool = false
     @State private var selectedShelter: ReliefShelter?
     @State private var selectedUnit: NdrfRescueUnit?
+    @State private var selectedDevice: ConnectedDevice?
     
     // GIS Search & Geocoding
     @State private var searchQuery: String = ""
@@ -54,6 +57,39 @@ public struct LiveMapView: View {
                     .tag(signal)
                 }
                 
+                // Live Connected Citizen & Mesh Relay Nodes
+                if showActiveDevices {
+                    ForEach(store.activeDevices.filter { $0.latitude != 0.0 && $0.longitude != 0.0 }) { device in
+                        if let coord = device.coordinate {
+                            Annotation(
+                                device.name,
+                                coordinate: coord,
+                                anchor: .bottom
+                            ) {
+                                ActiveNodeMapPin(device: device, isSelected: selectedDevice?.id == device.id)
+                                    .onTapGesture {
+                                        selectedDevice = device
+                                        store.selectedSignal = nil
+                                        selectedShelter = nil
+                                        selectedUnit = nil
+                                    }
+                            }
+                        }
+                    }
+                }
+                
+                // Population Density Heatmap Halos (Crowd / Survivor Concentration)
+                if showPopulationHeatmap {
+                    ForEach(store.activeDevices.filter { $0.latitude != 0.0 && $0.longitude != 0.0 }) { device in
+                        if let coord = device.coordinate {
+                            MapCircle(center: coord, radius: 450)
+                                .foregroundStyle(Color.green.opacity(0.18))
+                            MapCircle(center: coord, radius: 200)
+                                .foregroundStyle(Color.cyan.opacity(0.28))
+                        }
+                    }
+                }
+                
                 // Hazard Reports
                 ForEach(store.hazards) { hazard in
                     Annotation(hazard.title, coordinate: hazard.coordinate) {
@@ -70,6 +106,7 @@ public struct LiveMapView: View {
                                     selectedShelter = shelter
                                     store.selectedSignal = nil
                                     selectedUnit = nil
+                                    selectedDevice = nil
                                 }
                         }
                     }
@@ -84,6 +121,7 @@ public struct LiveMapView: View {
                                     selectedUnit = unit
                                     store.selectedSignal = nil
                                     selectedShelter = nil
+                                    selectedDevice = nil
                                 }
                         }
                     }
@@ -242,6 +280,8 @@ public struct LiveMapView: View {
                     Divider()
                     
                     Section("Map Display Overlays") {
+                        Toggle("Live Mesh Field Nodes", isOn: $showActiveDevices)
+                        Toggle("Population Density Heatmap", isOn: $showPopulationHeatmap)
                         Toggle("BLE Mesh Relay Lines", isOn: $showMeshHops)
                         Toggle("NDRF Rescue Teams", isOn: $showNdrfUnits)
                         Toggle("Relief Shelters", isOn: $showShelters)
@@ -269,8 +309,10 @@ public struct LiveMapView: View {
                 HStack(spacing: 12) {
                     MetricDot(count: store.totalActiveSignals, label: "SOS", color: .red)
                     MetricDot(count: store.criticalCount, label: "Critical", color: .orange)
+                    MetricDot(count: store.directCloudDevicesCount, label: "Cloud 🌐", color: .green)
+                    MetricDot(count: store.meshRelayDevicesCount, label: "Mesh 📡", color: .cyan)
                     MetricDot(count: store.ndrfUnits.count, label: "NDRF", color: .blue)
-                    MetricDot(count: store.shelters.count, label: "Camps", color: .green)
+                    MetricDot(count: store.shelters.count, label: "Camps", color: .purple)
                 }
                 
                 Spacer()
@@ -315,6 +357,32 @@ public struct LiveMapView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(Color.red.opacity(0.2))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    if !store.activeDevices.isEmpty {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.8)) {
+                                if let firstDev = store.activeDevices.first(where: { $0.latitude != 0.0 && $0.longitude != 0.0 }) {
+                                    position = .region(
+                                        MKCoordinateRegion(
+                                            center: CLLocationCoordinate2D(latitude: firstDev.latitude, longitude: firstDev.longitude),
+                                            span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                                        )
+                                    )
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.green).frame(width: 6, height: 6)
+                                Text("Nodes (\(store.activeDevices.count))")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green.opacity(0.18))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
                         .buttonStyle(.plain)
@@ -442,7 +510,7 @@ public struct LiveMapView: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
                     HStack(spacing: 10) {
-                        Label("Port :\(store.serverPort) SSE", systemImage: "antenna.radiowaves.left.and.right")
+                        Label("Port: \(String(store.serverPort)) SSE", systemImage: "antenna.radiowaves.left.and.right")
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
                             .foregroundColor(.cyan)
                         Label("Cloud Firestore Live", systemImage: "icloud.fill")
@@ -486,6 +554,17 @@ public struct LiveMapView: View {
                     Spacer().frame(height: 52)
                     NdrfUnitDetailOverlayCard(unit: unit) {
                         selectedUnit = nil
+                    }
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    Spacer()
+                }
+                .padding(.trailing, 16)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } else if let device = selectedDevice {
+                VStack {
+                    Spacer().frame(height: 52)
+                    NodeDetailOverlayCard(device: device) {
+                        selectedDevice = nil
                     }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     Spacer()
@@ -1278,5 +1357,211 @@ struct ImdSatelliteWeatherDrawer: View {
                 .stroke(Color.cyan.opacity(0.3), lineWidth: 1.5)
         )
         .shadow(color: .black.opacity(0.6), radius: 24, y: -6)
+    }
+}
+
+// MARK: - Active Citizen & Mesh Relay Node Map Pin
+public struct ActiveNodeMapPin: View {
+    let device: ConnectedDevice
+    let isSelected: Bool
+    
+    public var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                // Pulsing outer beacon ring
+                Circle()
+                    .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.4), lineWidth: isSelected ? 3 : 1.5)
+                    .frame(width: isSelected ? 38 : 28, height: isSelected ? 38 : 28)
+                
+                // Pin background body
+                Circle()
+                    .fill(device.isDirectCloud ? Color.green.opacity(0.9) : Color.cyan.opacity(0.9))
+                    .frame(width: isSelected ? 30 : 22, height: isSelected ? 30 : 22)
+                    .shadow(color: (device.isDirectCloud ? Color.green : Color.cyan).opacity(0.6), radius: isSelected ? 8 : 4)
+                
+                // Icon
+                Image(systemName: device.isDirectCloud ? "network" : "antenna.radiowaves.left.and.right")
+                    .font(.system(size: isSelected ? 13 : 10, weight: .bold))
+                    .foregroundColor(.black)
+            }
+            
+            // Callout Label
+            VStack(spacing: 1) {
+                HStack(spacing: 3) {
+                    Text(device.isDirectCloud ? "🌐" : "📡")
+                        .font(.system(size: 8))
+                    Text(device.name.components(separatedBy: " ").first ?? "Node")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                
+                HStack(spacing: 2) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 7))
+                        .foregroundColor(device.batteryLevel > 30 ? .green : .red)
+                    Text("\(device.batteryLevel)%")
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.85))
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.black.opacity(0.85))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.4), lineWidth: 1)
+            )
+            .offset(y: 2)
+        }
+    }
+}
+
+// MARK: - Node Detail Floating Card
+public struct NodeDetailOverlayCard: View {
+    let device: ConnectedDevice
+    let onClose: () -> Void
+    
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack {
+                HStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.2))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: device.isDirectCloud ? "network" : "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(device.isDirectCloud ? .green : .cyan)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(device.name)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white)
+                        Text("ID: \(device.id)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            Divider()
+            
+            // Connection Type Pill Badge
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(device.isDirectCloud ? Color.green : Color.cyan)
+                    .frame(width: 6, height: 6)
+                Text(device.isDirectCloud ? "DIRECT CLOUD UPLINK (FCM / CELLULAR)" : "BLE MULTI-HOP MESH RELAY")
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .foregroundColor(device.isDirectCloud ? .green : .cyan)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.3), lineWidth: 1)
+            )
+            
+            // Telemetry Grid
+            VStack(spacing: 6) {
+                HStack {
+                    Text("GPS Coordinates")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(String(format: "%.4f", device.latitude))°N, \(String(format: "%.4f", device.longitude))°E")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.cyan)
+                }
+                
+                HStack {
+                    Text("Sector / Location")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(device.location)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                
+                HStack {
+                    Text("Battery Level")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(device.batteryLevel > 30 ? .green : .red)
+                        Text("\(device.batteryLevel)%")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(device.batteryLevel > 30 ? .green : .red)
+                    }
+                }
+                
+                HStack {
+                    Text("Mesh Role")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(device.meshRole)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+                
+                HStack {
+                    Text("Last Uplink")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(device.lastSeen.formatted(date: .omitted, time: .standard))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            
+            // Population Density Guidance
+            HStack(spacing: 6) {
+                Image(systemName: "person.3.sequence.fill")
+                    .foregroundColor(.cyan)
+                    .font(.system(size: 11))
+                Text("Device telemetry creates survivor density zones on the pan-India GIS grid for targeted relief deployment.")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+            .padding(8)
+            .background(Color.cyan.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(14)
+        .frame(width: 290)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.5), radius: 18, x: -4, y: 6)
     }
 }

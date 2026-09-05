@@ -128,7 +128,7 @@ public struct MainAppView: View {
                         Circle()
                             .fill(store.isServerRunning ? Color.blue : Color.gray)
                             .frame(width: 6, height: 6)
-                        Text("Gateway SSE: :\(store.serverPort)")
+                        Text("Gateway SSE: :\(String(store.serverPort))")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(.secondary)
                         
@@ -139,24 +139,38 @@ public struct MainAppView: View {
                             .foregroundColor(.green)
                     }
                     
-                    // Clickable Sidebar Device Pill Button
+                    // Clickable Sidebar Device Pill Button (Dual Counts: Direct Cloud vs Mesh)
                     Button {
                         isShowingDevicesModal = true
                     } label: {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(store.activeDevices.isEmpty ? Color.secondary : Color.green)
-                                .frame(width: 7, height: 7)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("FIELD NODES REGISTRY")
+                                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(.secondary)
+                            }
                             
-                            Text("\(store.activeDevices.count) Field Node(s)")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(store.activeDevices.isEmpty ? .secondary : .green)
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.secondary)
+                            HStack(spacing: 8) {
+                                HStack(spacing: 3) {
+                                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                                    Text("🌐 \(store.directCloudDevicesCount) Cloud")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.green)
+                                }
+                                
+                                Text("•").foregroundColor(.secondary).font(.system(size: 9))
+                                
+                                HStack(spacing: 3) {
+                                    Circle().fill(Color.cyan).frame(width: 6, height: 6)
+                                    Text("📡 \(store.meshRelayDevicesCount) Mesh")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.cyan)
+                                }
+                            }
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
