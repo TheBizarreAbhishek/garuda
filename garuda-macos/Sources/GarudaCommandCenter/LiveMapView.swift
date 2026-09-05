@@ -20,6 +20,13 @@ public struct LiveMapView: View {
     @State private var selectedShelter: ReliefShelter?
     @State private var selectedUnit: NdrfRescueUnit?
     
+    // GIS Search & Geocoding
+    @State private var searchQuery: String = ""
+    @State private var searchResults: [MKMapItem] = []
+    @State private var isSearching: Bool = false
+    @State private var isSearchDropdownOpen: Bool = false
+    @State private var searchedPlace: MKMapItem?
+    
     private var currentMapStyle: MapStyle {
         switch store.satelliteMapMode {
         case .standardHybrid:
@@ -82,6 +89,19 @@ public struct LiveMapView: View {
                     }
                 }
                 
+                // User Searched Place Highlight Pin
+                if let place = searchedPlace {
+                    Annotation(
+                        place.name ?? "Target Location",
+                        coordinate: place.placemark.coordinate,
+                        anchor: .bottom
+                    ) {
+                        SearchedPlaceMapPin(place: place) {
+                            self.searchedPlace = nil
+                        }
+                    }
+                }
+                
                 // Mesh Multi-Hop Polyline Overlay
                 if showMeshHops {
                     ForEach(store.signals.filter { $0.status != .rescued }) { signal in
@@ -128,7 +148,7 @@ public struct LiveMapView: View {
             }
             
             // 2. Top Unified Frosted Glass Command Bar
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 // Garuda GIS Brand Header with Pulse Beacon
                 HStack(spacing: 8) {
                     ZStack {
@@ -152,6 +172,52 @@ public struct LiveMapView: View {
                         .foregroundColor(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
+                
+                Divider().frame(height: 18)
+                
+                // Place Search Input Field
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.cyan)
+                    
+                    TextField("Search city, district, GPS...", text: $searchQuery)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .frame(width: 170)
+                        .onSubmit {
+                            performPlaceSearch()
+                        }
+                        .onChange(of: searchQuery) { _, newValue in
+                            if newValue.count >= 2 {
+                                performPlaceSearch()
+                            } else if newValue.isEmpty {
+                                searchResults = []
+                                isSearchDropdownOpen = false
+                            }
+                        }
+                    
+                    if isSearching {
+                        ProgressView().controlSize(.mini)
+                    } else if !searchQuery.isEmpty {
+                        Button {
+                            searchQuery = ""
+                            searchResults = []
+                            isSearchDropdownOpen = false
+                            searchedPlace = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.18), lineWidth: 1))
                 
                 Divider().frame(height: 18)
                 
@@ -287,6 +353,80 @@ public struct LiveMapView: View {
             .padding(.horizontal, 14)
             .padding(.top, 10)
             
+            // Place Search Dropdown Floating Panel
+            if isSearchDropdownOpen && !searchResults.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("LOCATIONS FOUND (\(searchResults.count))")
+                            .font(.system(size: 9, weight: .black, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button {
+                            isSearchDropdownOpen = false
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.35))
+                    
+                    Divider()
+                    
+                    ScrollView {
+                        VStack(spacing: 2) {
+                            ForEach(searchResults, id: \.self) { item in
+                                Button {
+                                    selectPlace(item)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "mappin.circle.fill")
+                                            .foregroundColor(.cyan)
+                                            .font(.system(size: 14))
+                                        
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(item.name ?? "Unknown Place")
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundColor(.white)
+                                            if let title = item.placemark.title {
+                                                Text(title)
+                                                    .font(.system(size: 9))
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(1)
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Image(systemName: "arrow.up.right.circle")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.04))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(6)
+                    }
+                    .frame(maxHeight: 220)
+                }
+                .frame(width: 330)
+                .background(.ultraThickMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.cyan.opacity(0.35), lineWidth: 1))
+                .shadow(color: .black.opacity(0.55), radius: 16, y: 8)
+                .padding(.top, 56)
+                .padding(.leading, 180)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            
             // 3. Standby HUD Badge (Shown when 0 signals)
             if store.signals.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -387,6 +527,81 @@ public struct LiveMapView: View {
                     )
                 }
             }
+        }
+    }
+    
+    // MARK: - GIS Search Helpers
+    private func performPlaceSearch() {
+        guard !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        isSearching = true
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = searchQuery
+        request.region = LiveMapView.panIndiaRegion
+        
+        let search = MKLocalSearch(request: request)
+        search.start { response, error in
+            DispatchQueue.main.async {
+                self.isSearching = false
+                if let response = response {
+                    self.searchResults = response.mapItems
+                    self.isSearchDropdownOpen = !response.mapItems.isEmpty
+                }
+            }
+        }
+    }
+    
+    private func selectPlace(_ item: MKMapItem) {
+        searchedPlace = item
+        searchQuery = item.name ?? ""
+        isSearchDropdownOpen = false
+        withAnimation(.easeInOut(duration: 1.0)) {
+            position = .region(
+                MKCoordinateRegion(
+                    center: item.placemark.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                )
+            )
+        }
+    }
+}
+
+// MARK: - Searched Place Highlight Pin
+struct SearchedPlaceMapPin: View {
+    let place: MKMapItem
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 3) {
+            ZStack {
+                Circle()
+                    .fill(Color.cyan.opacity(0.35))
+                    .frame(width: 44, height: 44)
+                Circle()
+                    .fill(Color.cyan)
+                    .frame(width: 26, height: 26)
+                    .shadow(color: .cyan.opacity(0.8), radius: 8)
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.black)
+            }
+            
+            HStack(spacing: 5) {
+                Text(place.name ?? "Target Place")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.ultraThickMaterial)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.cyan, lineWidth: 1))
         }
     }
 }
@@ -745,137 +960,323 @@ struct NdrfUnitDetailOverlayCard: View {
     }
 }
 
-// MARK: - Live IMD / MOSDAC INSAT-3DS Weather Satellite Drawer
+// MARK: - Live IMD / MOSDAC INSAT-3DS Weather Satellite Radar Console
 struct ImdSatelliteWeatherDrawer: View {
     @ObservedObject var store: CommandCenterStore
     @Binding var isPresented: Bool
     
-    @State private var selectedChannel: String = "Color Enhanced Infra-Red (IR1)"
+    struct SatelliteChannel: Identifiable {
+        let id: String
+        let title: String
+        let subtitle: String
+        let resolution: String
+        let band: String
+        let urlString: String
+        let icon: String
+    }
     
-    let channels = [
-        "Color Enhanced Infra-Red (IR1)",
-        "Doppler Weather Radar (DWR Composite)",
-        "Water Vapour Cloud Motion (WV)",
-        "Visible Cyclone Eye (VIS)"
+    let channels: [SatelliteChannel] = [
+        SatelliteChannel(
+            id: "IR1",
+            title: "Color Enhanced Infra-Red (IR1)",
+            subtitle: "Deep convective storms & cyclone cloud tops",
+            resolution: "4.0 km Spatial Res",
+            band: "10.8 µm Thermal IR",
+            urlString: "https://mausam.imd.gov.in/Satellite/3Dasiasec_ir1.jpg",
+            icon: "thermometer.snowflake"
+        ),
+        SatelliteChannel(
+            id: "CTBT",
+            title: "Cloud Top Brightness Temp (CTBT)",
+            subtitle: "Extreme cloudburst & flash-flood detection",
+            resolution: "4.0 km Spatial Res",
+            band: "Color Coded (-80°C to +40°C)",
+            urlString: "https://mausam.imd.gov.in/Satellite/3Dasiasec_ctbt.jpg",
+            icon: "cloud.bolt.rain.fill"
+        ),
+        SatelliteChannel(
+            id: "VIS",
+            title: "Visible High-Resolution (VIS)",
+            subtitle: "Optical cyclone eye & coastal low-pressure",
+            resolution: "1.0 km Optical Res",
+            band: "0.65 µm Visible Channel",
+            urlString: "https://mausam.imd.gov.in/Satellite/3Dasiasec_vis.jpg",
+            icon: "eye.fill"
+        ),
+        SatelliteChannel(
+            id: "WV",
+            title: "Water Vapour Flow (WV)",
+            subtitle: "Upper-troposphere jetstream & moisture flow",
+            resolution: "8.0 km Spatial Res",
+            band: "6.8 µm Absorption Band",
+            urlString: "https://mausam.imd.gov.in/Satellite/3Dasiasec_wv.jpg",
+            icon: "water.waves"
+        ),
+        SatelliteChannel(
+            id: "GLOBE",
+            title: "Hemispheric Full-Disc (Global IR)",
+            subtitle: "Full Indian Ocean & Arabian Sea cyclone monitoring",
+            resolution: "8.0 km Global",
+            band: "Global Earth Disc",
+            urlString: "https://mausam.imd.gov.in/Satellite/3Dglobe_ir1.jpg",
+            icon: "globe.asia.australia.fill"
+        )
     ]
     
+    @State private var selectedChannelId: String = "IR1"
+    @State private var refreshKey: UUID = UUID()
+    @State private var isImageZoomed: Bool = false
+    
+    var currentChannel: SatelliteChannel {
+        channels.first(where: { $0.id == selectedChannelId }) ?? channels[0]
+    }
+    
+    var currentImageUrl: URL? {
+        let ts = Int(Date().timeIntervalSince1970)
+        return URL(string: "\(currentChannel.urlString)?ts=\(ts)")
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(spacing: 0) {
+            // Header Bar
+            HStack(spacing: 12) {
                 Image(systemName: "satellite.fill")
                     .foregroundColor(.cyan)
                     .font(.title3)
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("IMD INSAT-3DS Live Satellite Radar")
-                        .font(.headline.bold())
-                    Text("India Meteorological Department (IMD) • MOSDAC Live Feed")
-                        .font(.caption2)
+                    HStack(spacing: 8) {
+                        Text("IMD INSAT-3DS LIVE SATELLITE RADAR")
+                            .font(.system(size: 13, weight: .black, design: .monospaced))
+                            .foregroundColor(.white)
+                        
+                        Text("ISRO • MOSDAC FEED")
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.cyan.opacity(0.2))
+                            .foregroundColor(.cyan)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                    Text("Direct high-resolution optical & infrared telemetry from Geostationary Orbit (74°E)")
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                HStack(spacing: 6) {
-                    Circle().fill(Color.green).frame(width: 7, height: 7)
-                    Text("15-MIN REFRESH")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.green)
+                // Refresh Button
+                Button {
+                    withAnimation {
+                        refreshKey = UUID()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Refresh Feed")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.green.opacity(0.12))
-                .clipShape(Capsule())
+                .buttonStyle(.plain)
                 
+                // Close Button
                 Button {
                     withAnimation(.spring()) {
                         isPresented = false
                     }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
+                        .font(.title3)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.black.opacity(0.3))
             
             Divider()
             
+            // Main Content Area
             HStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.black.opacity(0.9))
-                        .frame(height: 160)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
-                        )
-                    
-                    VStack {
-                        HStack {
-                            Text("SECTOR: INDIAN SUBCONTINENT")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .foregroundColor(.cyan)
-                            Spacer()
-                            Text(Date().formatted(date: .omitted, time: .standard))
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(8)
+                // Left Side: Live Satellite Image Viewer Frame
+                VStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.black.opacity(0.85))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color.cyan.opacity(0.25), lineWidth: 1)
+                            )
                         
-                        Spacer()
-                        
-                        HStack(spacing: 12) {
-                            Image(systemName: "tornado")
-                                .font(.system(size: 32))
-                                .foregroundColor(.orange)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Cyclone Front & Cloudburst Watch")
-                                    .font(.subheadline.bold())
-                                    .foregroundColor(.white)
-                                Text("Heavy precipitation moving NW at 18 km/h. Cloud top: -64°C.")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                        if let url = currentImageUrl {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    VStack(spacing: 8) {
+                                        ProgressView()
+                                            .controlSize(.regular)
+                                            .tint(.cyan)
+                                        Text("Streaming live INSAT-3DS frame from IMD...")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                case .failure:
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(.orange)
+                                            .font(.title2)
+                                        Text("Feed temporarily reconnecting to IMD gateway")
+                                            .font(.caption2.bold())
+                                            .foregroundColor(.secondary)
+                                    }
+                                @unknown default:
+                                    EmptyView()
+                                }
                             }
+                            .id(refreshKey)
+                            .padding(4)
+                        }
+                        
+                        // Live HUD Stamp Overlay
+                        VStack {
+                            HStack {
+                                Text("SENSOR: INSAT-3DS \(currentChannel.id)")
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .padding(4)
+                                    .background(Color.black.opacity(0.75))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .foregroundColor(.cyan)
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 4) {
+                                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                                    Text("LIVE STREAM")
+                                        .font(.system(size: 8, weight: .heavy, design: .monospaced))
+                                        .foregroundColor(.green)
+                                }
+                                .padding(4)
+                                .background(Color.black.opacity(0.75))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                            .padding(8)
+                            
                             Spacer()
                         }
-                        .padding(12)
+                    }
+                    .frame(height: 230)
+                    
+                    // Metadata telemetry strip under image
+                    HStack {
+                        Label(currentChannel.band, systemImage: "wave.3.forward")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
                         
                         Spacer()
+                        
+                        Label(currentChannel.resolution, systemImage: "square.dashed")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text("Updated: 15-min cycle")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
                     }
+                    .padding(.horizontal, 4)
                 }
                 .frame(maxWidth: .infinity)
                 
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(channels, id: \.self) { ch in
-                        Button {
-                            selectedChannel = ch
-                        } label: {
-                            HStack {
-                                Image(systemName: selectedChannel == ch ? "checkmark.circle.fill" : "circle")
-                                    .foregroundColor(selectedChannel == ch ? .cyan : .secondary)
-                                    .font(.caption)
-                                Text(ch)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(selectedChannel == ch ? .white : .secondary)
-                                Spacer()
+                // Right Side: Spectral Channel Switcher & Map Overlay Controls
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("SELECT SPECTRAL CHANNEL")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundColor(.secondary)
+                    
+                    VStack(spacing: 6) {
+                        ForEach(channels) { ch in
+                            Button {
+                                selectedChannelId = ch.id
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: ch.icon)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(selectedChannelId == ch.id ? .cyan : .secondary)
+                                        .frame(width: 18)
+                                    
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(ch.title)
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(selectedChannelId == ch.id ? .white : .primary)
+                                        Text(ch.subtitle)
+                                            .font(.system(size: 9))
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    if selectedChannelId == ch.id {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.cyan)
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(selectedChannelId == ch.id ? Color.cyan.opacity(0.16) : Color.white.opacity(0.04))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(selectedChannelId == ch.id ? Color.cyan.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
+                                )
                             }
-                            .padding(6)
-                            .background(selectedChannel == ch ? Color.cyan.opacity(0.15) : Color.white.opacity(0.04))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    
+                    Divider().padding(.vertical, 2)
+                    
+                    // Map Heat Layer Opacity Slider
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("GIS MAP RADAR INTENSITY")
+                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(Int(store.imdRadarOpacity * 100))%")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(.cyan)
+                        }
+                        
+                        Slider(value: $store.imdRadarOpacity, in: 0.1...1.0)
+                            .tint(.cyan)
+                            .controlSize(.mini)
                     }
                 }
-                .frame(width: 250)
+                .frame(width: 320)
             }
+            .padding(14)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: 880)
         .background(.ultraThickMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 18, y: -4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.cyan.opacity(0.3), lineWidth: 1.5)
+        )
+        .shadow(color: .black.opacity(0.6), radius: 24, y: -6)
     }
 }
