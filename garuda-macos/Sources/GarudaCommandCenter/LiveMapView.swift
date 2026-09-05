@@ -78,14 +78,17 @@ public struct LiveMapView: View {
                     }
                 }
                 
-                // Population Density Heatmap Halos (Crowd / Survivor Concentration)
+                // Population Density & Radio Footprint Halos (Realistic RF: 65m Direct BLE, 250m Multi-Hop Mesh)
                 if showPopulationHeatmap {
                     ForEach(store.activeDevices.filter { $0.latitude != 0.0 && $0.longitude != 0.0 }) { device in
                         if let coord = device.coordinate {
-                            MapCircle(center: coord, radius: 450)
-                                .foregroundStyle(Color.green.opacity(0.18))
-                            MapCircle(center: coord, radius: 200)
-                                .foregroundStyle(Color.cyan.opacity(0.28))
+                            // Multi-Hop Mesh Propagation Corridor (~250m with 4-5 peer relays)
+                            MapCircle(center: coord, radius: 250)
+                                .foregroundStyle((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.14))
+                            
+                            // Physical Direct RF Coverage (Single-Hop BLE 5.0 / Nearby ~65m)
+                            MapCircle(center: coord, radius: 65)
+                                .foregroundStyle((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.26))
                         }
                     }
                 }
