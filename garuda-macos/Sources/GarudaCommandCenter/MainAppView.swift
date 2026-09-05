@@ -142,47 +142,54 @@ public struct MainAppView: View {
                 Spacer()
                 
                 // 3. Bottom Status & Uplink Box Cards
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     // Box A: Emergency Mode Status Card
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack {
+                        HStack(spacing: 6) {
                             Circle()
                                 .fill(store.isEmergencyBroadcastActive ? Color.red : Color.green)
-                                .frame(width: 7, height: 7)
+                                .frame(width: 8, height: 8)
                             Text(store.isEmergencyBroadcastActive ? "ACTIVE EMERGENCY" : "ALL SECTORS STANDBY")
-                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                .font(.system(size: 10, weight: .black, design: .monospaced))
                                 .foregroundColor(store.isEmergencyBroadcastActive ? .red : .green)
                             Spacer()
                         }
                         
                         Text(store.activeDistrict)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.85))
                             .lineLimit(1)
                     }
                     .padding(10)
-                    .background(store.isEmergencyBroadcastActive ? Color.red.opacity(0.10) : Color.green.opacity(0.06))
+                    .background(store.isEmergencyBroadcastActive ? Color.red.opacity(0.15) : Color.green.opacity(0.10))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(store.isEmergencyBroadcastActive ? Color.red.opacity(0.35) : Color.green.opacity(0.25), lineWidth: 1)
+                            .stroke(store.isEmergencyBroadcastActive ? Color.red.opacity(0.5) : Color.green.opacity(0.35), lineWidth: 1)
                     )
                     
                     // Box B: Gateway & Field Nodes Registry Card
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 6) {
                             Circle()
                                 .fill(store.isServerRunning ? Color.blue : Color.gray)
-                                .frame(width: 5, height: 5)
-                            Text("Gateway SSE: :\(String(store.serverPort))")
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundColor(.secondary)
+                                .frame(width: 6, height: 6)
+                            Text("Gateway: Port \(String(store.serverPort))")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.9))
                             
                             Spacer()
                             
-                            Text("Online")
-                                .font(.system(size: 8, weight: .black, design: .monospaced))
-                                .foregroundColor(.green)
+                            HStack(spacing: 3) {
+                                Circle().fill(Color.green).frame(width: 4, height: 4)
+                                Text("Online")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.green)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.15))
+                            .clipShape(Capsule())
                         }
                         
                         Divider().opacity(0.3)
@@ -190,54 +197,55 @@ public struct MainAppView: View {
                         Button {
                             isShowingDevicesModal = true
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: 5) {
                                 HStack {
                                     Text("FIELD NODES REGISTRY")
-                                        .font(.system(size: 8, weight: .black, design: .monospaced))
-                                        .foregroundColor(.secondary)
+                                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                                        .foregroundColor(.cyan)
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 7, weight: .bold))
+                                        .font(.system(size: 8, weight: .bold))
                                         .foregroundColor(.secondary)
                                 }
                                 
-                                HStack(spacing: 6) {
-                                    HStack(spacing: 3) {
-                                        Circle().fill(Color.green).frame(width: 5, height: 5)
+                                HStack(spacing: 8) {
+                                    HStack(spacing: 4) {
+                                        Circle().fill(Color.green).frame(width: 6, height: 6)
                                         Text("\(store.directCloudDevicesCount) Cloud")
-                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                                             .foregroundColor(.green)
                                     }
                                     
-                                    Text("•").foregroundColor(.secondary).font(.system(size: 8))
+                                    Text("•").foregroundColor(.secondary).font(.system(size: 9))
                                     
-                                    HStack(spacing: 3) {
-                                        Circle().fill(Color.cyan).frame(width: 5, height: 5)
+                                    HStack(spacing: 4) {
+                                        Circle().fill(Color.cyan).frame(width: 6, height: 6)
                                         Text("\(store.meshRelayDevicesCount) Mesh")
-                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                                             .foregroundColor(.cyan)
                                     }
                                 }
                             }
                             .padding(8)
-                            .background(Color.white.opacity(0.04))
+                            .background(Color.white.opacity(0.06))
                             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
                             )
                         }
                         .buttonStyle(.plain)
                     }
                     .padding(10)
-                    .background(Color.white.opacity(0.04))
+                    .background(Color.white.opacity(0.05))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
                     )
                 }
                 .padding(.horizontal, 12)
+                .padding(.bottom, 16)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(NSColor.windowBackgroundColor))

@@ -477,38 +477,7 @@ public struct LiveMapView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             
-            // 3. Standby HUD Badge (Shown when 0 signals)
-            if store.signals.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 7, height: 7)
-                        Text("ALL SECTORS STANDBY")
-                            .font(.system(size: 11, weight: .black, design: .monospaced))
-                            .foregroundColor(.green)
-                    }
-                    Text("Pan-India Ground BLE Mesh & Satellite Gateway Active")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
-                    HStack(spacing: 10) {
-                        Label("Port: \(String(store.serverPort)) SSE", systemImage: "antenna.radiowaves.left.and.right")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundColor(.cyan)
-                        Label("Cloud Firestore Live", systemImage: "icloud.fill")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundColor(.purple)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(.leading, 16)
-                .padding(.bottom, 20)
-            }
+
             
             // 3. Right-Side Inspector Drawer
             if let selected = store.selectedSignal {
