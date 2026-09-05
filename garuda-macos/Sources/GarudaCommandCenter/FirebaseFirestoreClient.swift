@@ -25,7 +25,8 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func startLiveFirestoreListener(
         onSosReceived: @escaping @MainActor ([SosSignal]) -> Void,
         onHazardsReceived: @escaping @MainActor ([HazardReport]) -> Void,
-        onDevicesReceived: @escaping @MainActor ([ConnectedDevice]) -> Void
+        onDevicesReceived: @escaping @MainActor ([ConnectedDevice]) -> Void,
+        onSheltersReceived: @escaping @MainActor ([ReliefShelter]) -> Void = { _ in }
     ) {
         pollTimer?.cancel()
         
@@ -33,6 +34,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         fetchSosSignals(completion: onSosReceived)
         fetchHazards(completion: onHazardsReceived)
         fetchConnectedDevices(completion: onDevicesReceived)
+        fetchReliefShelters(completion: onSheltersReceived)
         
         // Live poll every 3 seconds for new cloud documents
         pollTimer = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -41,6 +43,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                 self?.fetchSosSignals(completion: onSosReceived)
                 self?.fetchHazards(completion: onHazardsReceived)
                 self?.fetchConnectedDevices(completion: onDevicesReceived)
+                self?.fetchReliefShelters(completion: onSheltersReceived)
             }
     }
     
@@ -339,6 +342,83 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         let body: [String: Any] = ["fields": fields]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
+        URLSession.shared.dataTask(with: request).resume()
+    }
+    
+    // MARK: - Fetch Relief Shelters from Cloud
+    public func fetchReliefShelters(completion: @escaping @MainActor ([ReliefShelter]) -> Void) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/relief_shelters?key=\(apiKey)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 4.0
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data, error == nil else { return }
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let documents = json["documents"] as? [[String: Any]] {
+                var shelters: [ReliefShelter] = []
+                for doc in documents {
+                    guard let fields = doc["fields"] as? [String: Any],
+                          let name = doc["name"] as? String else { continue }
+                    let docId = name.components(separatedBy: "/").last ?? UUID().uuidString
+                    let shelterName = (fields["name"] as? [String: Any])?["stringValue"] as? String ?? "Relief Shelter"
+                    let lat = (fields["latitude"] as? [String: Any])?["doubleValue"] as? Double
+                        ?? Double((fields["latitude"] as? [String: Any])?["integerValue"] as? String ?? "") ?? 0.0
+                    let lon = (fields["longitude"] as? [String: Any])?["doubleValue"] as? Double
+                        ?? Double((fields["longitude"] as? [String: Any])?["integerValue"] as? String ?? "") ?? 0.0
+                    let cap = Int((fields["capacity"] as? [String: Any])?["integerValue"] as? String ?? "500") ?? 500
+                    let occ = Int((fields["currentOccupancy"] as? [String: Any])?["integerValue"] as? String ?? "0") ?? 0
+                    let supplies = (fields["suppliesStatus"] as? [String: Any])?["stringValue"] as? String ?? "Ample Food & Water"
+                    let phone = (fields["contactPhone"] as? [String: Any])?["stringValue"] as? String ?? "1078 (Disaster Helpline)"
+                    
+                    shelters.append(
+                        ReliefShelter(
+                            id: docId,
+                            name: shelterName,
+                            latitude: lat,
+                            longitude: lon,
+                            capacity: cap,
+                            currentOccupancy: occ,
+                            suppliesStatus: supplies,
+                            contactPhone: phone
+                        )
+                    )
+                }
+                Task { @MainActor in
+                    completion(shelters)
+                }
+            }
+        }.resume()
+    }
+    
+    // MARK: - Publish / Update Relief Shelter on Cloud
+    public func publishReliefShelter(_ shelter: ReliefShelter) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/relief_shelters/\(shelter.id)?key=\(apiKey)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "fields": [
+                "name": ["stringValue": shelter.name],
+                "latitude": ["doubleValue": shelter.latitude],
+                "longitude": ["doubleValue": shelter.longitude],
+                "capacity": ["integerValue": "\(shelter.capacity)"],
+                "currentOccupancy": ["integerValue": "\(shelter.currentOccupancy)"],
+                "suppliesStatus": ["stringValue": shelter.suppliesStatus],
+                "contactPhone": ["stringValue": shelter.contactPhone],
+                "updatedAt": ["integerValue": "\(Int(Date().timeIntervalSince1970))"]
+            ]
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request).resume()
+    }
+    
+    // MARK: - Delete Relief Shelter from Cloud
+    public func deleteReliefShelter(id: String) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/relief_shelters/\(id)?key=\(apiKey)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: request).resume()
     }
 }

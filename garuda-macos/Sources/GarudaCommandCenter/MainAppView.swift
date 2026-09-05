@@ -4,6 +4,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
     case liveMap = "Live GIS Map"
     case triageKanban = "Triage & Rescue"
     case emergencyBroadcast = "Emergency Broadcast"
+    case reliefCamps = "Relief Camps"
     case imdRadar = "IMD Satellite Radar"
     case hazardReports = "Hazard Reports"
     case meshTelemetry = "Mesh Telemetry"
@@ -15,6 +16,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .liveMap: return "map.fill"
         case .triageKanban: return "square.grid.3x2.fill"
         case .emergencyBroadcast: return "antenna.radiowaves.left.and.right"
+        case .reliefCamps: return "tent.fill"
         case .imdRadar: return "satellite.fill"
         case .hazardReports: return "exclamationmark.triangle.fill"
         case .meshTelemetry: return "waveform.path.ecg"
@@ -103,6 +105,16 @@ public struct MainAppView: View {
                                                 .padding(.horizontal, 6)
                                                 .padding(.vertical, 2)
                                                 .background(Color.yellow.opacity(0.9))
+                                                .foregroundColor(.black)
+                                                .clipShape(Capsule())
+                                        }
+                                    case .reliefCamps:
+                                        if !store.shelters.isEmpty {
+                                            Text("\(store.shelters.count)")
+                                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.green.opacity(0.85))
                                                 .foregroundColor(.black)
                                                 .clipShape(Capsule())
                                         }
@@ -259,6 +271,8 @@ public struct MainAppView: View {
                     TriageKanbanView(store: store)
                 case .emergencyBroadcast:
                     EmergencyBroadcasterView(store: store)
+                case .reliefCamps:
+                    ReliefCampsManagerView(store: store)
                 case .imdRadar:
                     ImdSatelliteRadarView(store: store)
                 case .hazardReports:

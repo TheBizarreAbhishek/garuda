@@ -68,6 +68,17 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                 self.activeDevices = devices
                 self.connectedClientsCount = devices.count
             }
+        } onSheltersReceived: { [weak self] cloudShelters in
+            guard let self = self else { return }
+            withAnimation(.easeInOut) {
+                for shelter in cloudShelters {
+                    if let idx = self.shelters.firstIndex(where: { $0.id == shelter.id }) {
+                        self.shelters[idx] = shelter
+                    } else {
+                        self.shelters.append(shelter)
+                    }
+                }
+            }
         }
     }
     
@@ -340,5 +351,31 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         }
     }
     
-
+    // MARK: - Relief Shelters Management
+    public func addReliefShelter(_ shelter: ReliefShelter) {
+        withAnimation(.spring()) {
+            if let idx = shelters.firstIndex(where: { $0.id == shelter.id }) {
+                shelters[idx] = shelter
+            } else {
+                shelters.insert(shelter, at: 0)
+            }
+        }
+        FirebaseFirestoreClient.shared.publishReliefShelter(shelter)
+    }
+    
+    public func updateReliefShelter(_ shelter: ReliefShelter) {
+        withAnimation(.spring()) {
+            if let idx = shelters.firstIndex(where: { $0.id == shelter.id }) {
+                shelters[idx] = shelter
+            }
+        }
+        FirebaseFirestoreClient.shared.publishReliefShelter(shelter)
+    }
+    
+    public func deleteReliefShelter(id: String) {
+        withAnimation(.spring()) {
+            shelters.removeAll(where: { $0.id == id })
+        }
+        FirebaseFirestoreClient.shared.deleteReliefShelter(id: id)
+    }
 }
