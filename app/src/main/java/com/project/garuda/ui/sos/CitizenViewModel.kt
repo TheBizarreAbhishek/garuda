@@ -82,7 +82,9 @@ class CitizenViewModel(
             try {
                 advertiserManager = BleAdvertiserManager(appContext)
                 scannerManager = BleScannerManager(appContext)
-                meshRelayEngine = MeshRelayEngine(advertiserManager, scannerManager, viewModelScope)
+                val androidId = android.provider.Settings.Secure.getString(appContext.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: (Build.MODEL ?: "GarudaNode")
+                val myHash = androidId.hashCode()
+                meshRelayEngine = MeshRelayEngine(advertiserManager, scannerManager, viewModelScope, localDeviceHash = myHash)
 
                 startMeshScanner()
                 startHeartbeatBroadcaster()
@@ -268,9 +270,6 @@ class CitizenViewModel(
         if (mode == DisasterMode.STANDBY) {
             cancelSosCountdown()
             stopBroadcasting()
-            stopMeshScanner()
-        } else {
-            startMeshScanner()
         }
         _uiState.update { it.copy(mode = mode) }
     }
@@ -282,7 +281,11 @@ class CitizenViewModel(
         heartbeatJob = viewModelScope.launch {
             while (isActive) {
                 val nowEpoch = (System.currentTimeMillis() / 1000).toInt()
-                val deviceHashInt = (Build.MODEL ?: "GarudaCitizen").hashCode()
+                val androidId = appContext?.let { ctx ->
+                    android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+                } ?: (Build.MODEL ?: "GarudaCitizen")
+                val deviceHashInt = androidId.hashCode()
+
                 val heartbeatPacket = GarudaPacket(
                     packetType = GarudaPacket.TYPE_HEARTBEAT,
                     packetId = Random.nextInt(10000, 99999),
@@ -296,6 +299,7 @@ class CitizenViewModel(
                 )
                 try {
                     meshRelayEngine?.broadcastPacket(heartbeatPacket)
+                    Log.d(TAG, "Sent presence heartbeat beacon from $androidId (hash=$deviceHashInt)")
                 } catch (e: Exception) {
                     Log.v(TAG, "Heartbeat broadcast failed", e)
                 }

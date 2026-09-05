@@ -23,7 +23,8 @@ import kotlin.random.Random
 class MeshRelayEngine(
     private val advertiserManager: BleAdvertiserManager? = null,
     private val scannerManager: BleScannerManager? = null,
-    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
+    var localDeviceHash: Int = 0
 ) {
 
     companion object {
@@ -39,7 +40,7 @@ class MeshRelayEngine(
         }
     }
 
-    // Active nearby peers map: deviceHash -> lastSeenTimestampMs
+    // Active nearby peers map: peerIdentifierHash -> lastSeenTimestampMs
     private val activePeersMap = java.util.concurrent.ConcurrentHashMap<Int, Long>()
 
     private val _incomingPackets = MutableSharedFlow<GarudaPacket>(extraBufferCapacity = 64)
@@ -49,10 +50,14 @@ class MeshRelayEngine(
      * Processes an incoming raw binary BLE packet with device hardware address.
      */
     fun processIncomingRawBytes(deviceAddress: String, rawBytes: ByteArray) {
+        val packet = GarudaProtocolEncoderDecoder.decode(rawBytes) ?: return
+        
+        // Record peer hardware address if available
         if (deviceAddress.isNotEmpty()) {
             activePeersMap[deviceAddress.hashCode()] = System.currentTimeMillis()
         }
-        processIncomingRawBytes(rawBytes)
+        
+        processIncomingPacket(packet)
     }
 
     /**
@@ -68,8 +73,8 @@ class MeshRelayEngine(
      */
     @Synchronized
     fun processIncomingPacket(packet: GarudaPacket) {
-        // Record active peer device hash timestamp
-        if (packet.deviceHash != 0) {
+        // Record active peer device hash timestamp (ignore self-originating packets)
+        if (packet.deviceHash != 0 && (localDeviceHash == 0 || packet.deviceHash != localDeviceHash)) {
             activePeersMap[packet.deviceHash] = System.currentTimeMillis()
         }
 
@@ -77,7 +82,6 @@ class MeshRelayEngine(
         if (seenPacketIds.containsKey(packet.packetId)) {
             return // Ignore duplicate packet
         }
-
 
         // 2. Mark packet as seen
         seenPacketIds[packet.packetId] = true
@@ -87,8 +91,8 @@ class MeshRelayEngine(
             _incomingPackets.emit(packet)
         }
 
-        // 4. Relay packet if TTL > 0
-        if (packet.ttl > 0) {
+        // 4. Relay packet if TTL > 0 and not a simple 1-hop presence heartbeat
+        if (packet.ttl > 0 && packet.packetType != GarudaPacket.TYPE_HEARTBEAT) {
             val relayedPacket = packet.copy(
                 ttl = packet.ttl - 1,
                 hopCount = packet.hopCount + 1
