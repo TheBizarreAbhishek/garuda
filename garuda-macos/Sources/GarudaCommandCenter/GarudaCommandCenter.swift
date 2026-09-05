@@ -7,6 +7,9 @@ struct WindowAccessor: NSViewRepresentable {
         DispatchQueue.main.async {
             if let window = view.window {
                 window.collectionBehavior.insert([.fullScreenPrimary, .fullScreenAllowsTiling])
+                if let screen = window.screen ?? NSScreen.main {
+                    window.setFrame(screen.visibleFrame, display: true, animate: false)
+                }
             }
         }
         return view

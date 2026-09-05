@@ -19,14 +19,22 @@ public struct LiveMapView: View {
     @State private var selectedShelter: ReliefShelter?
     @State private var selectedUnit: NdrfRescueUnit?
     
-    // Live IMD / ISRO Radar Simulation Pulse
-    @State private var radarPulsePhase: CGFloat = 0.0
+    private var currentMapStyle: MapStyle {
+        switch store.satelliteMapMode {
+        case .standardHybrid:
+            return .hybrid(elevation: .realistic)
+        case .isroBhuvan:
+            return .imagery(elevation: .realistic)
+        case .imdDopplerRadar:
+            return .hybrid(elevation: .realistic, pointsOfInterest: .including([.hospital, .police, .fireStation]))
+        }
+    }
     
     public var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // Main Interactive Map
+        ZStack(alignment: .top) {
+            // 1. Full-Screen Interactive GIS Map
             Map(position: $position, selection: $store.selectedSignal) {
-                // 1. Victim SOS Signals
+                // Victim SOS Signals
                 ForEach(store.signals) { signal in
                     Annotation(
                         signal.victimName,
@@ -38,14 +46,14 @@ public struct LiveMapView: View {
                     .tag(signal)
                 }
                 
-                // 2. Hazard Reports
+                // Hazard Reports
                 ForEach(store.hazards) { hazard in
                     Annotation(hazard.title, coordinate: hazard.coordinate) {
                         HazardMapPin(hazard: hazard)
                     }
                 }
                 
-                // 3. Relief Shelters (Toggleable)
+                // Relief Shelters
                 if showShelters {
                     ForEach(store.shelters) { shelter in
                         Annotation(shelter.name, coordinate: shelter.coordinate) {
@@ -59,7 +67,7 @@ public struct LiveMapView: View {
                     }
                 }
                 
-                // 4. NDRF Rescue Units (Toggleable)
+                // NDRF Rescue Units
                 if showNdrfUnits {
                     ForEach(store.ndrfUnits) { unit in
                         Annotation(unit.unitName, coordinate: unit.coordinate) {
@@ -73,22 +81,22 @@ public struct LiveMapView: View {
                     }
                 }
                 
-                // 5. Mesh Multi-Hop Polyline Overlay (Victim -> Gateway Routing)
+                // Mesh Multi-Hop Polyline Overlay
                 if showMeshHops {
                     ForEach(store.signals.filter { $0.status != .rescued }) { signal in
                         MapPolyline(coordinates: [
                             signal.coordinate,
                             CLLocationCoordinate2D(latitude: signal.latitude + 0.006, longitude: signal.longitude + 0.005),
-                            CLLocationCoordinate2D(latitude: 11.6960, longitude: 76.1480) // Gateway Base
+                            CLLocationCoordinate2D(latitude: 11.6960, longitude: 76.1480)
                         ])
                         .stroke(
-                            signal.priority == .critical ? Color.red.opacity(0.65) : Color.blue.opacity(0.55),
-                            style: StrokeStyle(lineWidth: 2, dash: [6, 4])
+                            signal.priority == .critical ? Color.red.opacity(0.7) : Color.blue.opacity(0.6),
+                            style: StrokeStyle(lineWidth: 2.5, dash: [6, 4])
                         )
                     }
                 }
                 
-                // 6. ISRO / IMD Satellite Storm Radar Heat Zones
+                // ISRO / IMD Satellite Storm Radar Heat Zones
                 if store.satelliteMapMode == .imdDopplerRadar {
                     MapCircle(center: CLLocationCoordinate2D(latitude: 11.6854, longitude: 76.1320), radius: 4500)
                         .foregroundStyle(Color.red.opacity(store.imdRadarOpacity * 0.35))
@@ -107,248 +115,224 @@ public struct LiveMapView: View {
                 MapPitchToggle()
             }
             
-            // Top Left: Indian Government Satellite & Layer Control Bar
-            VStack(alignment: .leading, spacing: 10) {
-                SatelliteLayerControlCard(
-                    store: store,
-                    showShelters: $showShelters,
-                    showNdrfUnits: $showNdrfUnits,
-                    showMeshHops: $showMeshHops,
-                    showWeatherDrawer: $showWeatherDrawer
-                )
+            // 2. Top Unified Slim Floating Control Bar (Non-Intrusive)
+            HStack(spacing: 12) {
+                // Layer Selector Menu Button
+                Menu {
+                    Section("Indian Satellite & GIS Providers") {
+                        ForEach(SatelliteMapLayerMode.allCases) { mode in
+                            Button {
+                                store.satelliteMapMode = mode
+                            } label: {
+                                HStack {
+                                    Image(systemName: mode.icon)
+                                    Text(mode.rawValue)
+                                    if store.satelliteMapMode == mode {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    Section("Map Display Layers") {
+                        Toggle("BLE Mesh Relay Lines", isOn: $showMeshHops)
+                        Toggle("NDRF Rescue Teams", isOn: $showNdrfUnits)
+                        Toggle("Relief Shelters", isOn: $showShelters)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.3.layers.3d.fill")
+                            .foregroundColor(.cyan)
+                        Text(store.satelliteMapMode.rawValue)
+                            .font(.system(size: 12, weight: .bold))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThickMaterial)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                }
+                .menuStyle(.borderlessButton)
                 
-                CameraQuickJumpBar(position: $position, store: store)
+                // Metrics Capsule
+                HStack(spacing: 10) {
+                    MetricDot(count: store.totalActiveSignals, label: "SOS", color: .red)
+                    Text("•").foregroundColor(.secondary).font(.caption2)
+                    MetricDot(count: store.criticalCount, label: "Critical", color: .orange)
+                    Text("•").foregroundColor(.secondary).font(.caption2)
+                    MetricDot(count: store.ndrfUnits.count, label: "NDRF", color: .blue)
+                    Text("•").foregroundColor(.secondary).font(.caption2)
+                    MetricDot(count: store.shelters.count, label: "Camps", color: .green)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.ultraThickMaterial)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                
+                Spacer()
+                
+                // Quick Camera Jump Buttons
+                HStack(spacing: 6) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 1.2)) {
+                            position = .region(
+                                MKCoordinateRegion(
+                                    center: CLLocationCoordinate2D(latitude: 22.5937, longitude: 78.9629),
+                                    span: MKCoordinateSpan(latitudeDelta: 22.0, longitudeDelta: 22.0)
+                                )
+                            )
+                        }
+                    } label: {
+                        Text("🇮🇳 Pan-India")
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(.ultraThickMaterial)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        withAnimation(.easeInOut(duration: 1.0)) {
+                            if let firstSignal = store.signals.first {
+                                position = .region(
+                                    MKCoordinateRegion(
+                                        center: firstSignal.coordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                                    )
+                                )
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.red).frame(width: 6, height: 6)
+                            Text("Victims")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(.ultraThickMaterial)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        withAnimation(.easeInOut(duration: 1.0)) {
+                            if let firstShelter = store.shelters.first {
+                                position = .region(
+                                    MKCoordinateRegion(
+                                        center: firstShelter.coordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                                    )
+                                )
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.green).frame(width: 6, height: 6)
+                            Text("Camps")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(.ultraThickMaterial)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        withAnimation(.spring()) {
+                            showWeatherDrawer.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "satellite.fill")
+                                .foregroundColor(.cyan)
+                            Text("IMD Radar")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.cyan)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.cyan.opacity(0.2))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.cyan.opacity(0.4), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
             
-            // Top Right: Live Metrics & Incident Detail Cards
-            VStack(alignment: .trailing, spacing: 12) {
-                MapMetricsOverlay(store: store)
-                
-                if let selected = store.selectedSignal {
+            // 3. Right-Side Inspector Drawer
+            if let selected = store.selectedSignal {
+                VStack {
+                    Spacer().frame(height: 52)
                     SignalDetailOverlayCard(signal: selected, store: store)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
-                } else if let shelter = selectedShelter {
+                    Spacer()
+                }
+                .padding(.trailing, 16)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } else if let shelter = selectedShelter {
+                VStack {
+                    Spacer().frame(height: 52)
                     ShelterDetailOverlayCard(shelter: shelter) {
                         selectedShelter = nil
                     }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
-                } else if let unit = selectedUnit {
+                    Spacer()
+                }
+                .padding(.trailing, 16)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } else if let unit = selectedUnit {
+                VStack {
+                    Spacer().frame(height: 52)
                     NdrfUnitDetailOverlayCard(unit: unit) {
                         selectedUnit = nil
                     }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
+                    Spacer()
                 }
+                .padding(.trailing, 16)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             
-            // Bottom Drawer / Slide-Over: IMD & ISRO Live Weather Satellite Feed
+            // 4. Bottom Drawer: IMD INSAT-3DS Weather Satellite HUD
             if showWeatherDrawer {
-                ImdSatelliteWeatherDrawer(store: store, isPresented: $showWeatherDrawer)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                VStack {
+                    Spacer()
+                    ImdSatelliteWeatherDrawer(store: store, isPresented: $showWeatherDrawer)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .padding(14)
             }
-        }
-    }
-    
-    private var currentMapStyle: MapStyle {
-        switch store.satelliteMapMode {
-        case .standardHybrid:
-            return .hybrid(elevation: .realistic)
-        case .isroBhuvan:
-            return .imagery(elevation: .realistic)
-        case .imdDopplerRadar:
-            return .hybrid(elevation: .realistic, pointsOfInterest: .including([.hospital, .police, .fireStation]))
         }
     }
 }
 
-// MARK: - Satellite & Government Layer Control Card
-struct SatelliteLayerControlCard: View {
-    @ObservedObject var store: CommandCenterStore
-    @Binding var showShelters: Bool
-    @Binding var showNdrfUnits: Bool
-    @Binding var showMeshHops: Bool
-    @Binding var showWeatherDrawer: Bool
+// MARK: - Metric Dot Item
+struct MetricDot: View {
+    let count: Int
+    let label: String
+    let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .foregroundColor(.cyan)
-                Text("GOVERNMENT SATELLITE & GIS FEEDS")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
-                Spacer()
-            }
-            
-            // Mode Picker
-            Picker("", selection: $store.satelliteMapMode) {
-                ForEach(SatelliteMapLayerMode.allCases) { mode in
-                    Label(mode.rawValue, systemImage: mode.icon).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            
-            HStack {
-                Text("Agency:")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Text(store.satelliteMapMode.agency)
-                    .font(.caption2.bold())
-                    .foregroundColor(.cyan)
-                Spacer()
-            }
-            
-            Divider()
-            
-            // Layer Toggles
-            HStack(spacing: 12) {
-                Toggle(isOn: $showMeshHops) {
-                    Label("BLE Mesh Hops", systemImage: "arrow.triangle.swap")
-                        .font(.caption.bold())
-                }
-                .toggleStyle(.checkbox)
-                
-                Toggle(isOn: $showNdrfUnits) {
-                    Label("NDRF Teams", systemImage: "shield.fill")
-                        .font(.caption.bold())
-                }
-                .toggleStyle(.checkbox)
-                
-                Toggle(isOn: $showShelters) {
-                    Label("Relief Camps", systemImage: "house.fill")
-                        .font(.caption.bold())
-                }
-                .toggleStyle(.checkbox)
-            }
-            
-            Divider()
-            
-            // Live IMD Radar Button & Opacity Slider
-            HStack(spacing: 12) {
-                Button {
-                    withAnimation(.spring()) {
-                        showWeatherDrawer.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "cloud.sun.bolt.fill")
-                            .foregroundColor(.orange)
-                        Text("Live IMD INSAT-3DS Feed")
-                            .font(.caption.bold())
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.orange.opacity(0.18))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                
-                if store.satelliteMapMode == .imdDopplerRadar {
-                    HStack(spacing: 6) {
-                        Text("Radar Density:")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Slider(value: $store.imdRadarOpacity, in: 0.2...1.0)
-                            .frame(width: 80)
-                    }
-                }
-            }
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text("\(count)")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary)
         }
-        .padding(14)
-        .frame(width: 380)
-        .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
-    }
-}
-
-// MARK: - Camera Quick Jump Toolbar
-struct CameraQuickJumpBar: View {
-    @Binding var position: MapCameraPosition
-    @ObservedObject var store: CommandCenterStore
-    
-    var body: some View {
-        HStack(spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 1.2)) {
-                    position = .region(
-                        MKCoordinateRegion(
-                            center: CLLocationCoordinate2D(latitude: 22.5937, longitude: 78.9629),
-                            span: MKCoordinateSpan(latitudeDelta: 22.0, longitudeDelta: 22.0)
-                        )
-                    )
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text("🇮🇳 Pan-India")
-                        .font(.caption.bold())
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.black.opacity(0.4))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            
-            Button {
-                withAnimation(.easeInOut(duration: 1.0)) {
-                    if let firstSignal = store.signals.first {
-                        position = .region(
-                            MKCoordinateRegion(
-                                center: firstSignal.coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
-                            )
-                        )
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "cross.case.fill")
-                        .foregroundColor(.red)
-                    Text("Focus Victims (\(store.signals.count))")
-                        .font(.caption.bold())
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.red.opacity(0.2))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            
-            Button {
-                withAnimation(.easeInOut(duration: 1.0)) {
-                    if let firstShelter = store.shelters.first {
-                        position = .region(
-                            MKCoordinateRegion(
-                                center: firstShelter.coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
-                            )
-                        )
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "house.fill")
-                        .foregroundColor(.green)
-                    Text("Relief Camps")
-                        .font(.caption.bold())
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.green.opacity(0.2))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(6)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
     }
 }
 
@@ -370,29 +354,28 @@ struct VictimMapPin: View {
         VStack(spacing: 2) {
             ZStack {
                 Circle()
-                    .fill(pinColor.opacity(0.3))
-                    .frame(width: isSelected ? 46 : 34, height: isSelected ? 46 : 34)
+                    .fill(pinColor.opacity(0.35))
+                    .frame(width: isSelected ? 42 : 32, height: isSelected ? 42 : 32)
                 
                 Circle()
                     .fill(pinColor)
-                    .frame(width: isSelected ? 30 : 24, height: isSelected ? 30 : 24)
+                    .frame(width: isSelected ? 28 : 22, height: isSelected ? 28 : 22)
                     .shadow(color: pinColor.opacity(0.8), radius: 6)
                 
                 Image(systemName: signal.emergencyType.icon)
-                    .font(.system(size: isSelected ? 14 : 11, weight: .bold))
+                    .font(.system(size: isSelected ? 13 : 10, weight: .bold))
                     .foregroundColor(.white)
             }
             
-            // Hop Badge
             Text("\(signal.hopCount)H • \(signal.bloodGroup)")
-                .font(.system(size: 9, weight: .heavy))
+                .font(.system(size: 8, weight: .heavy))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(pinColor, lineWidth: 1))
         }
-        .scaleEffect(isSelected ? 1.18 : 1.0)
+        .scaleEffect(isSelected ? 1.15 : 1.0)
         .animation(.spring(response: 0.3), value: isSelected)
     }
 }
@@ -406,13 +389,13 @@ struct ShelterMapPin: View {
             ZStack {
                 Circle()
                     .fill(Color.green.opacity(0.25))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 34, height: 34)
                 Circle()
                     .fill(Color.green)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 22, height: 22)
                     .shadow(color: .green.opacity(0.6), radius: 4)
                 Image(systemName: "house.fill")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white)
             }
             
@@ -436,13 +419,13 @@ struct NdrfUnitMapPin: View {
             ZStack {
                 Circle()
                     .fill(Color.blue.opacity(0.25))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 34, height: 34)
                 Circle()
                     .fill(Color.blue)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 22, height: 22)
                     .shadow(color: .blue.opacity(0.6), radius: 4)
                 Image(systemName: "shield.lefthalf.filled")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white)
             }
             
@@ -463,58 +446,18 @@ struct HazardMapPin: View {
     var body: some View {
         VStack(spacing: 2) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 18))
+                .font(.system(size: 16))
                 .foregroundColor(.yellow)
-                .background(Circle().fill(.black).frame(width: 22, height: 22))
+                .background(Circle().fill(.black).frame(width: 20, height: 20))
                 .shadow(radius: 4)
             
             Text(hazard.title)
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: 8, weight: .semibold))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
                 .background(.ultraThickMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 3))
         }
-    }
-}
-
-// MARK: - Metrics Overlay
-struct MapMetricsOverlay: View {
-    @ObservedObject var store: CommandCenterStore
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            MetricPill(title: "Active SOS", value: "\(store.totalActiveSignals)", color: .red)
-            MetricPill(title: "Critical Triage", value: "\(store.criticalCount)", color: .orange)
-            MetricPill(title: "NDRF Units", value: "\(store.ndrfUnits.count)", color: .blue)
-            MetricPill(title: "Relief Camps", value: "\(store.shelters.count)", color: .green)
-        }
-        .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
-    }
-}
-
-struct MetricPill: View {
-    let title: String
-    let value: String
-    let color: Color
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(.secondary)
-            HStack(spacing: 4) {
-                Circle().fill(color).frame(width: 7, height: 7)
-                Text(value)
-                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
     }
 }
 
@@ -524,13 +467,13 @@ struct SignalDetailOverlayCard: View {
     @ObservedObject var store: CommandCenterStore
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(signal.victimName)
                         .font(.headline.bold())
                     Text(signal.emergencyType.rawValue)
-                        .font(.subheadline)
+                        .font(.caption.bold())
                         .foregroundColor(.red)
                 }
                 Spacer()
@@ -546,35 +489,34 @@ struct SignalDetailOverlayCard: View {
             
             Divider()
             
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
                 GridRow {
-                    Text("Blood Group:").foregroundColor(.secondary).font(.caption)
-                    Text(signal.bloodGroup).font(.caption.bold())
+                    Text("Blood Group:").foregroundColor(.secondary).font(.caption2)
+                    Text(signal.bloodGroup).font(.caption2.bold())
                 }
                 GridRow {
-                    Text("Mesh Hops:").foregroundColor(.secondary).font(.caption)
-                    Text("\(signal.hopCount) Hop(s) via BLE").font(.caption.bold())
+                    Text("Mesh Hops:").foregroundColor(.secondary).font(.caption2)
+                    Text("\(signal.hopCount) Hop(s) via BLE").font(.caption2.bold())
                 }
                 GridRow {
-                    Text("Battery:").foregroundColor(.secondary).font(.caption)
-                    Text("\(signal.batteryLevel)%").font(.caption.bold())
+                    Text("Battery:").foregroundColor(.secondary).font(.caption2)
+                    Text("\(signal.batteryLevel)%").font(.caption2.bold())
                 }
                 GridRow {
-                    Text("Gateway Node:").foregroundColor(.secondary).font(.caption)
-                    Text(signal.relayedByGatewayId).font(.caption.monospaced())
+                    Text("Gateway:").foregroundColor(.secondary).font(.caption2)
+                    Text(signal.relayedByGatewayId).font(.system(size: 10, design: .monospaced))
                 }
             }
             
             if !signal.notes.isEmpty {
                 Text(signal.notes)
-                    .font(.caption)
-                    .padding(10)
+                    .font(.caption2)
+                    .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.secondary.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             
-            // Dispatch Actions
             HStack(spacing: 8) {
                 Button {
                     store.updateSignalStatus(
@@ -601,12 +543,12 @@ struct SignalDetailOverlayCard: View {
                 .controlSize(.small)
             }
         }
-        .padding(16)
-        .frame(width: 310)
+        .padding(14)
+        .frame(width: 270)
         .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 14, y: 4)
     }
 }
 
@@ -639,37 +581,38 @@ struct ShelterDetailOverlayCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Capacity:")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Text("\(shelter.currentOccupancy) / \(shelter.capacity) Citizens")
-                        .font(.caption.bold())
+                    Text("\(shelter.currentOccupancy) / \(shelter.capacity)")
+                        .font(.caption2.bold())
                 }
                 
                 ProgressView(value: Double(shelter.currentOccupancy), total: Double(shelter.capacity))
                     .tint(.green)
                 
                 Text(shelter.suppliesStatus)
-                    .font(.caption)
-                    .padding(8)
+                    .font(.caption2)
+                    .padding(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.green.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 
                 HStack {
                     Image(systemName: "phone.fill")
                         .foregroundColor(.blue)
-                    Text("Helpline: \(shelter.contactPhone)")
-                        .font(.caption.bold())
+                        .font(.caption2)
+                    Text(shelter.contactPhone)
+                        .font(.caption2.bold())
                 }
             }
         }
-        .padding(16)
-        .frame(width: 310)
+        .padding(14)
+        .frame(width: 270)
         .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 14, y: 4)
     }
 }
 
@@ -701,31 +644,31 @@ struct NdrfUnitDetailOverlayCard: View {
             
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Equipment / Capability:")
-                        .font(.caption)
+                    Text("Capability:")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                     Spacer()
                     Text(unit.type)
-                        .font(.caption.bold())
+                        .font(.caption2.bold())
                 }
                 
                 HStack {
-                    Text("Deployment Status:")
-                        .font(.caption)
+                    Text("Status:")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                     Spacer()
                     Text(unit.status)
-                        .font(.caption.bold())
+                        .font(.caption2.bold())
                         .foregroundColor(.orange)
                 }
             }
         }
-        .padding(16)
-        .frame(width: 310)
+        .padding(14)
+        .frame(width: 270)
         .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 14, y: 4)
     }
 }
 
@@ -740,34 +683,34 @@ struct ImdSatelliteWeatherDrawer: View {
         "Color Enhanced Infra-Red (IR1)",
         "Doppler Weather Radar (DWR Composite)",
         "Water Vapour Cloud Motion (WV)",
-        "Visible Channel Cyclone Eye (VIS)"
+        "Visible Cyclone Eye (VIS)"
     ]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "satellite.fill")
                     .foregroundColor(.cyan)
                     .font(.title3)
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("IMD INSAT-3DS / MOSDAC Live Satellite Weather Radar")
+                    Text("IMD INSAT-3DS Live Satellite Radar")
                         .font(.headline.bold())
-                    Text("India Meteorological Department (IMD) • Ministry of Earth Sciences, Govt of India")
-                        .font(.caption)
+                    Text("India Meteorological Department (IMD) • MOSDAC Live Feed")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                HStack(spacing: 8) {
-                    Circle().fill(Color.green).frame(width: 8, height: 8)
-                    Text("LIVE SAT-FEED 15-MIN REFRESH")
+                HStack(spacing: 6) {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                    Text("15-MIN REFRESH")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(.green)
                 }
                 .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.vertical, 3)
                 .background(Color.green.opacity(0.12))
                 .clipShape(Capsule())
                 
@@ -785,62 +728,53 @@ struct ImdSatelliteWeatherDrawer: View {
             
             Divider()
             
-            HStack(spacing: 20) {
-                // Live Radar Simulation Canvas / Preview
-                VStack(alignment: .leading, spacing: 8) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.black.opacity(0.85))
-                            .frame(height: 220)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
-                            )
+            HStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.black.opacity(0.9))
+                        .frame(height: 160)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
+                        )
+                    
+                    VStack {
+                        HStack {
+                            Text("SECTOR: INDIAN SUBCONTINENT")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(.cyan)
+                            Spacer()
+                            Text(Date().formatted(date: .omitted, time: .standard))
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(8)
                         
-                        // Simulated Radar Sweep & Satellite Contour Visualizer
-                        VStack {
-                            HStack {
-                                Text("INSAT-3DS SECTOR: INDIAN SUBCONTINENT")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.cyan)
-                                Spacer()
-                                Text(Date().formatted(date: .abbreviated, time: .standard))
-                                    .font(.system(size: 9, design: .monospaced))
+                        Spacer()
+                        
+                        HStack(spacing: 12) {
+                            Image(systemName: "tornado")
+                                .font(.system(size: 32))
+                                .foregroundColor(.orange)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Cyclone Front & Cloudburst Watch")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.white)
+                                Text("Heavy precipitation moving NW at 18 km/h. Cloud top: -64°C.")
+                                    .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
-                            .padding(10)
-                            
-                            Spacer()
-                            
-                            HStack(spacing: 16) {
-                                Image(systemName: "tornado")
-                                    .font(.system(size: 44))
-                                    .foregroundColor(.orange)
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Active Cyclone & Deep Depression Front")
-                                        .font(.subheadline.bold())
-                                        .foregroundColor(.white)
-                                    Text("Heavy precipitation band moving NW at 18 km/h. Cloud top temp: -64°C.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .padding(16)
-                            
                             Spacer()
                         }
+                        .padding(12)
+                        
+                        Spacer()
                     }
                 }
                 .frame(maxWidth: .infinity)
                 
-                // Channel Selection & Scientific Metrics
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("SELECT SATELLITE CHANNEL")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.secondary)
-                    
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(channels, id: \.self) { ch in
                         Button {
                             selectedChannel = ch
@@ -848,28 +782,27 @@ struct ImdSatelliteWeatherDrawer: View {
                             HStack {
                                 Image(systemName: selectedChannel == ch ? "checkmark.circle.fill" : "circle")
                                     .foregroundColor(selectedChannel == ch ? .cyan : .secondary)
+                                    .font(.caption)
                                 Text(ch)
-                                    .font(.caption.bold())
+                                    .font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(selectedChannel == ch ? .white : .secondary)
                                 Spacer()
                             }
-                            .padding(8)
+                            .padding(6)
                             .background(selectedChannel == ch ? Color.cyan.opacity(0.15) : Color.white.opacity(0.04))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .frame(width: 320)
+                .frame(width: 250)
             }
         }
-        .padding(18)
+        .padding(14)
         .frame(maxWidth: .infinity)
         .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 20, y: -4)
-        .padding(16)
-        .frame(maxHeight: .infinity, alignment: .bottom)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
+        .shadow(color: .black.opacity(0.5), radius: 18, y: -4)
     }
 }
