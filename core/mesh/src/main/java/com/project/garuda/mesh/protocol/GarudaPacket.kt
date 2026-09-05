@@ -37,6 +37,7 @@ data class GarudaPacket(
         const val TYPE_SOS: Byte = 0x01
         const val TYPE_CHAT: Byte = 0x02
         const val TYPE_HEARTBEAT: Byte = 0x03
+        const val TYPE_EMERGENCY_BROADCAST: Byte = 0x04
 
         const val EMERGENCY_NONE: Byte = 0x00
         const val EMERGENCY_MEDICAL: Byte = 0x01

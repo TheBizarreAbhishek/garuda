@@ -97,6 +97,33 @@ class CitizenViewModel(
                                 )
                             )
                         }
+
+                        // 🚨 Emergency Declaration Relayed via BLE Mesh from other peer nodes
+                        if (packet.packetType == GarudaPacket.TYPE_EMERGENCY_BROADCAST || 
+                            (packet.packetType == GarudaPacket.TYPE_SOS && packet.emergencyType != GarudaPacket.EMERGENCY_NONE)) {
+                            appContext?.let { ctx ->
+                                com.project.garuda.notification.GarudaNotificationManager.showHeadsUpNotification(
+                                    context = ctx,
+                                    title = "DISASTER EMERGENCY (MESH RELAY)",
+                                    message = "Critical disaster declaration received via Bluetooth Mesh multi-hop relay. Evacuate or seek immediate high ground.",
+                                    targetArea = "Your Region",
+                                    isEmergency = true
+                                )
+                            }
+                            if (_uiState.value.mode == DisasterMode.STANDBY && !_uiState.value.isGovernmentAlertDialogOpen) {
+                                _uiState.update {
+                                    it.copy(
+                                        pendingGovAlert = GovernmentAlert(
+                                            headline = "DISASTER EMERGENCY (MESH RELAY)",
+                                            region = "Disaster Zone",
+                                            instructions = "Emergency alert received via multi-hop BLE mesh (Hop #${packet.hopCount}). Seek shelter or follow evacuation directives.",
+                                            timestampFormatted = "Relayed via Mesh Hop #${packet.hopCount}"
+                                        ),
+                                        isGovernmentAlertDialogOpen = true
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -112,6 +139,20 @@ class CitizenViewModel(
                     val currentLoc = firebaseGateway.hardwareManager?.locationFlow?.value?.locationName ?: ""
                     val targetZone = syncState.alertDistrict
                     val isApplicable = isGeofenceMatch(currentLoc, targetZone)
+
+                    // 📡 Re-broadcast Cloud Emergency Alert onto BLE Mesh for all offline nearby citizens!
+                    val meshAlertPacket = GarudaPacket(
+                        packetType = GarudaPacket.TYPE_EMERGENCY_BROADCAST,
+                        packetId = (syncState.alertHeadline.hashCode() xor syncState.alertDistrict.hashCode()),
+                        deviceHash = firebaseGateway.deviceId.hashCode(),
+                        timestamp = (System.currentTimeMillis() / 1000).toInt(),
+                        latitude = firebaseGateway.hardwareManager?.locationFlow?.value?.latitude ?: 0.0,
+                        longitude = firebaseGateway.hardwareManager?.locationFlow?.value?.longitude ?: 0.0,
+                        emergencyType = GarudaPacket.EMERGENCY_TRAPPED,
+                        hopCount = 0,
+                        ttl = 7
+                    )
+                    meshRelayEngine?.broadcastPacket(meshAlertPacket)
 
                     if (isApplicable) {
                         Log.i(TAG, "🚨 Geofence MATCH! Alert targeting '$targetZone' applies to current location '$currentLoc'")

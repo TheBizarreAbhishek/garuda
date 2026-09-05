@@ -80,13 +80,16 @@ object GarudaNotificationManager {
         targetArea: String = "Your Region",
         isEmergency: Boolean = false
     ) {
-        // --- DEDUPLICATION CHECK ---
-        val dedupKey = "$isEmergency|$title|$targetArea"
+        // --- HYBRID DEDUPLICATION CHECK (Internet vs BLE Mesh) ---
+        // Strip common prefixes/suffixes for cross-channel matching
+        val normalizedTitle = title.replace("🚨", "").replace("📢", "").replace("(MESH RELAY)", "").trim().lowercase()
+        val normalizedArea = targetArea.trim().lowercase()
+        val dedupKey = if (isEmergency) "EMERGENCY|$normalizedArea" else "ALERT|$normalizedTitle|$normalizedArea"
         val currentTime = System.currentTimeMillis()
         val lastSeen = recentNotificationTimestamps[dedupKey] ?: 0L
 
         if (currentTime - lastSeen < DEDUPLICATION_WINDOW_MS) {
-            Log.d(TAG, "Suppressed duplicate notification within deduplication window: $dedupKey")
+            Log.d(TAG, "⚡ Suppressed duplicate notification (Channel Race Resolved): $dedupKey")
             return
         }
         recentNotificationTimestamps[dedupKey] = currentTime

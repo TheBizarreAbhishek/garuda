@@ -107,6 +107,9 @@ class FirebaseCloudGateway(
                 put("location", JSONObject().put("stringValue", realLocationName))
                 put("latitude", JSONObject().put("doubleValue", realLat))
                 put("longitude", JSONObject().put("doubleValue", realLon))
+                put("connectionType", JSONObject().put("stringValue", "CLOUD_DIRECT"))
+                put("isDirectCloud", JSONObject().put("booleanValue", true))
+                put("hopCount", JSONObject().put("integerValue", "0"))
             }
 
             val body = JSONObject().put("fields", fields)

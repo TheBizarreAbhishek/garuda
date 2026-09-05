@@ -37,15 +37,11 @@ data class EmergencyContact(
 )
 
 data class MedicalProfile(
-    val fullName: String = "Abhishek Sharma",
-    val bloodGroup: String = "O+ (Positive)",
-    val allergies: String = "Penicillin, Peanuts",
-    val chronicConditions: String = "None / Asthma inhaler in bag",
-    val emergencyContacts: List<EmergencyContact> = listOf(
-        EmergencyContact("1", "Pooja Sharma", "Sister", "+91 98765 43210"),
-        EmergencyContact("2", "Rajesh Sharma", "Father", "+91 98111 22334"),
-        EmergencyContact("3", "NDRF Control Room", "Official Helpline", "1078")
-    )
+    val fullName: String = "Citizen Node",
+    val bloodGroup: String = "O+",
+    val allergies: String = "",
+    val chronicConditions: String = "",
+    val emergencyContacts: List<EmergencyContact> = emptyList()
 )
 
 sealed interface SosBroadcastState {

@@ -9,6 +9,8 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var hazards: [HazardReport] = []
     @Published public var activeDevices: [ConnectedDevice] = []
     @Published public var notifications: [PushNotificationRecord] = []
+    @Published public var shelters: [ReliefShelter] = []
+    @Published public var ndrfUnits: [NdrfRescueUnit] = []
     @Published public var selectedSignal: SosSignal?
     @Published public var isEmergencyBroadcastActive: Bool = false
     @Published public var activeDistrict: String = "All Regions (Standby)"
@@ -17,10 +19,17 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var serverPort: UInt16 = 8080
     @Published public var isServerRunning: Bool = false
     
+    // ISRO / IMD Satellite Layer Controls
+    @Published public var satelliteMapMode: SatelliteMapLayerMode = .standardHybrid
+    @Published public var imdRadarOpacity: Double = 0.65
+    @Published public var isWeatherRadarDrawerOpen: Bool = false
+    
     private var simulationTimer: AnyCancellable?
     
     public init() {
-        loadMockData()
+        // Pure Real Data Mode: No mock data loaded on startup.
+        // Data is populated live from connected mobile devices via CommandGridServer (SSE / :8080)
+        // and Firebase Firestore cloud listener.
         setupLiveServer()
         setupLiveFirebaseCloud()
     }
@@ -58,6 +67,17 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
             withAnimation(.easeInOut) {
                 self.activeDevices = devices
                 self.connectedClientsCount = devices.count
+            }
+        } onSheltersReceived: { [weak self] cloudShelters in
+            guard let self = self else { return }
+            withAnimation(.easeInOut) {
+                for shelter in cloudShelters {
+                    if let idx = self.shelters.firstIndex(where: { $0.id == shelter.id }) {
+                        self.shelters[idx] = shelter
+                    } else {
+                        self.shelters.append(shelter)
+                    }
+                }
             }
         }
     }
@@ -107,6 +127,14 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     
     public var totalActiveSignals: Int {
         signals.filter { $0.status != .rescued }.count
+    }
+    
+    public var directCloudDevicesCount: Int {
+        activeDevices.filter { $0.isDirectCloud }.count
+    }
+    
+    public var meshRelayDevicesCount: Int {
+        activeDevices.filter { !$0.isDirectCloud }.count
     }
     
     public func updateSignalStatus(id: String, newStatus: RescueStatus, assignedUnit: String? = nil) {
@@ -323,94 +351,109 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         }
     }
     
-    private func loadMockData() {
-        signals = [
-            SosSignal(
-                victimName: "Rohan Kulkarni & Family",
-                bloodGroup: "B+",
-                emergencyType: .trapped,
-                priority: .critical,
-                latitude: 11.6854,
-                longitude: 76.1320,
-                hopCount: 3,
-                batteryLevel: 22,
-                timestamp: Date().addingTimeInterval(-300),
-                status: .pending,
-                notes: "3 people trapped on 2nd floor, water level rising rapidly. Relayed over 3 BLE hops.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-01"
-            ),
-            SosSignal(
-                victimName: "Dr. Meenakshi Sundaram",
-                bloodGroup: "O+",
-                emergencyType: .medical,
-                priority: .critical,
-                latitude: 11.6912,
-                longitude: 76.1410,
-                hopCount: 2,
-                batteryLevel: 41,
-                timestamp: Date().addingTimeInterval(-720),
-                status: .dispatched,
-                notes: "Elderly patient requiring oxygen and insulin. Debris blocking road.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-02",
-                assignedUnit: "NDRF Team Alpha (12 Personnel)"
-            ),
-            SosSignal(
-                victimName: "Vikas Deshmukh",
-                bloodGroup: "AB+",
-                emergencyType: .flood,
-                priority: .urgent,
-                latitude: 11.6780,
-                longitude: 76.1250,
-                hopCount: 1,
-                batteryLevel: 68,
-                timestamp: Date().addingTimeInterval(-1200),
-                status: .inProgress,
-                notes: "Stuck on bridge embankment. Boat needed.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-01",
-                assignedUnit: "SDRF Boat Squadron 4"
-            ),
-            SosSignal(
-                victimName: "Kavita Pillai",
-                bloodGroup: "A+",
-                emergencyType: .general,
-                priority: .safe,
-                latitude: 11.6990,
-                longitude: 76.1550,
-                hopCount: 4,
-                batteryLevel: 89,
-                timestamp: Date().addingTimeInterval(-1800),
-                status: .rescued,
-                notes: "Evacuated to Meppadi Community Relief Shelter.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-03",
-                assignedUnit: "Local Volunteer Rescue Group"
-            )
-        ]
+    // MARK: - Relief Shelters Management
+    public func addReliefShelter(_ shelter: ReliefShelter) {
+        withAnimation(.spring()) {
+            if let idx = shelters.firstIndex(where: { $0.id == shelter.id }) {
+                shelters[idx] = shelter
+            } else {
+                shelters.insert(shelter, at: 0)
+            }
+        }
+        // 1. Sync shelter to Firebase Firestore
+        FirebaseFirestoreClient.shared.publishReliefShelter(shelter)
         
-        alerts = []
+        // 2. Publish Targeted Push Notification to Citizen Apps in Firestore
+        let notifTitle = "🚨 NEW RELIEF CAMP: \(shelter.name)"
+        let notifMsg = "Safe evacuation center active with \(shelter.capacity) beds. Location: \(String(format: "%.4f", shelter.latitude))°N, \(String(format: "%.4f", shelter.longitude))°E. Supplies: \(shelter.suppliesStatus). Helpline: \(shelter.contactPhone)."
+        FirebaseFirestoreClient.shared.publishNotification(
+            title: notifTitle,
+            message: notifMsg,
+            priority: "HIGH",
+            targetArea: "Nearby Citizens (15km Radius)"
+        )
         
-        hazards = [
-            HazardReport(
-                title: "Meppadi Main Bridge Collapsed",
-                category: "Structural / Road Cutoff",
-                latitude: 11.6890,
-                longitude: 76.1360,
-                reporterName: "Mesh Node #104",
-                reportedAt: Date().addingTimeInterval(-900),
-                isVerified: true,
-                description: "Bridge completely washed away. Route completely impassable for heavy rescue vehicles."
+        // 3. Add to local notification history
+        notifications.insert(
+            PushNotificationRecord(
+                title: notifTitle,
+                message: notifMsg,
+                targetArea: "Nearby Citizens (15km Radius)",
+                priority: "HIGH"
             ),
-            HazardReport(
-                title: "High Voltage Power Line Down",
-                category: "Electrical Hazard",
-                latitude: 11.6810,
-                longitude: 76.1280,
-                reporterName: "Mesh Node #082",
-                reportedAt: Date().addingTimeInterval(-1400),
-                isVerified: false,
-                description: "Submerged transformer sparking in standing water. Electrocution risk."
-            )
-        ]
-        
-        selectedSignal = signals.first
+            at: 0
+        )
+    }
+    
+    public func updateReliefShelter(_ shelter: ReliefShelter) {
+        withAnimation(.spring()) {
+            if let idx = shelters.firstIndex(where: { $0.id == shelter.id }) {
+                shelters[idx] = shelter
+            }
+        }
+        FirebaseFirestoreClient.shared.publishReliefShelter(shelter)
+    }
+    
+    public func deleteReliefShelter(id: String) {
+        withAnimation(.spring()) {
+            shelters.removeAll(where: { $0.id == id })
+        }
+        FirebaseFirestoreClient.shared.deleteReliefShelter(id: id)
+    }
+    
+    // MARK: - Hazard Reports Management
+    public func addHazard(_ hazard: HazardReport) {
+        withAnimation(.spring()) {
+            if let idx = hazards.firstIndex(where: { $0.id == hazard.id }) {
+                hazards[idx] = hazard
+            } else {
+                hazards.insert(hazard, at: 0)
+            }
+        }
+        FirebaseFirestoreClient.shared.publishHazardReport(hazard: hazard)
+    }
+    
+    public func updateHazardStatus(id: String, newStatus: HazardStatus, assignedTeam: String? = nil) {
+        withAnimation(.spring()) {
+            if let idx = hazards.firstIndex(where: { $0.id == id }) {
+                hazards[idx].status = newStatus
+                hazards[idx].isVerified = (newStatus == .verifiedActive || newStatus == .roadBlocked)
+                if let team = assignedTeam {
+                    hazards[idx].assignedTeam = team
+                }
+                
+                let updatedHazard = hazards[idx]
+                FirebaseFirestoreClient.shared.publishHazardReport(hazard: updatedHazard)
+                
+                // If road blocked, broadcast instant warning push notification to Citizen Apps
+                if newStatus == .roadBlocked {
+                    let notifTitle = "⛔ ROAD BLOCKED: \(updatedHazard.title)"
+                    let notifMsg = "NDRF Hazard Alert: Route impassable near \(String(format: "%.4f", updatedHazard.latitude))°N, \(String(format: "%.4f", updatedHazard.longitude))°E (\(updatedHazard.category)). Evacuees please reroute."
+                    FirebaseFirestoreClient.shared.publishNotification(
+                        title: notifTitle,
+                        message: notifMsg,
+                        priority: "CRITICAL",
+                        targetArea: "Evacuation Route Sector (10km)"
+                    )
+                    
+                    self.notifications.insert(
+                        PushNotificationRecord(
+                            title: notifTitle,
+                            message: notifMsg,
+                            targetArea: "Evacuation Route Sector (10km)",
+                            priority: "CRITICAL"
+                        ),
+                        at: 0
+                    )
+                }
+            }
+        }
+    }
+    
+    public func deleteHazard(id: String) {
+        withAnimation(.spring()) {
+            hazards.removeAll(where: { $0.id == id })
+        }
+        FirebaseFirestoreClient.shared.deleteHazardReport(id: id)
     }
 }
