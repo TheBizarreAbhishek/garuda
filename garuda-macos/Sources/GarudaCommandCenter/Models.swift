@@ -225,19 +225,19 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
 
 public struct PushNotificationRecord: Identifiable, Codable, Hashable {
     public let id: String
-    public var title: String
-    public var message: String
-    public var targetArea: String
-    public var priority: String
-    public var timestamp: Date
-    public var deliveredCount: Int
+    public let title: String
+    public let message: String
+    public let targetArea: String
+    public let priority: String
+    public let timestamp: Date
+    public let deliveredCount: Int
     
     public init(
         id: String = UUID().uuidString,
         title: String,
         message: String,
         targetArea: String,
-        priority: String = "HIGH",
+        priority: String,
         timestamp: Date = Date(),
         deliveredCount: Int = 1
     ) {
@@ -251,3 +251,96 @@ public struct PushNotificationRecord: Identifiable, Codable, Hashable {
     }
 }
 
+public enum SatelliteMapLayerMode: String, CaseIterable, Identifiable {
+    case standardHybrid = "3D Hybrid Satellite"
+    case isroBhuvan = "ISRO Bhuvan NDEM GIS"
+    case imdDopplerRadar = "IMD INSAT-3DS Live Radar"
+    
+    public var id: String { rawValue }
+    
+    public var icon: String {
+        switch self {
+        case .standardHybrid: return "globe.asia.australia.fill"
+        case .isroBhuvan: return "building.columns.fill"
+        case .imdDopplerRadar: return "cloud.bolt.rain.fill"
+        }
+    }
+    
+    public var agency: String {
+        switch self {
+        case .standardHybrid: return "Apple MapKit Ultra-HD 3D"
+        case .isroBhuvan: return "ISRO NRSC Cartosat & NDEM Layers"
+        case .imdDopplerRadar: return "IMD & ISRO MOSDAC Live Weather Radar"
+        }
+    }
+}
+
+public struct ReliefShelter: Identifiable, Hashable, Codable {
+    public let id: String
+    public let name: String
+    public let latitude: Double
+    public let longitude: Double
+    public let capacity: Int
+    public let currentOccupancy: Int
+    public let suppliesStatus: String
+    public let contactPhone: String
+    
+    public var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+    
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        latitude: Double,
+        longitude: Double,
+        capacity: Int,
+        currentOccupancy: Int,
+        suppliesStatus: String = "Ample Food, Water & Medical Aid",
+        contactPhone: String = "1078 (Disaster Helpline)"
+    ) {
+        self.id = id
+        self.name = name
+        self.latitude = latitude
+        self.longitude = longitude
+        self.capacity = capacity
+        self.currentOccupancy = currentOccupancy
+        self.suppliesStatus = suppliesStatus
+        self.contactPhone = contactPhone
+    }
+}
+
+public struct NdrfRescueUnit: Identifiable, Hashable, Codable {
+    public let id: String
+    public let unitName: String
+    public let battalion: String
+    public let type: String
+    public let latitude: Double
+    public let longitude: Double
+    public let status: String
+    public let assignedVictimId: String?
+    
+    public var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+    
+    public init(
+        id: String = UUID().uuidString,
+        unitName: String,
+        battalion: String = "10th Battalion NDRF",
+        type: String = "Rapid Flood & Airborne Rescue Unit",
+        latitude: Double,
+        longitude: Double,
+        status: String = "Deployed On-Scene",
+        assignedVictimId: String? = nil
+    ) {
+        self.id = id
+        self.unitName = unitName
+        self.battalion = battalion
+        self.type = type
+        self.latitude = latitude
+        self.longitude = longitude
+        self.status = status
+        self.assignedVictimId = assignedVictimId
+    }
+}

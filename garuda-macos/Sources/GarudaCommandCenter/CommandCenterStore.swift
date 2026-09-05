@@ -9,6 +9,8 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var hazards: [HazardReport] = []
     @Published public var activeDevices: [ConnectedDevice] = []
     @Published public var notifications: [PushNotificationRecord] = []
+    @Published public var shelters: [ReliefShelter] = []
+    @Published public var ndrfUnits: [NdrfRescueUnit] = []
     @Published public var selectedSignal: SosSignal?
     @Published public var isEmergencyBroadcastActive: Bool = false
     @Published public var activeDistrict: String = "All Regions (Standby)"
@@ -16,6 +18,11 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var connectedClientsCount: Int = 0
     @Published public var serverPort: UInt16 = 8080
     @Published public var isServerRunning: Bool = false
+    
+    // ISRO / IMD Satellite Layer Controls
+    @Published public var satelliteMapMode: SatelliteMapLayerMode = .standardHybrid
+    @Published public var imdRadarOpacity: Double = 0.65
+    @Published public var isWeatherRadarDrawerOpen: Bool = false
     
     private var simulationTimer: AnyCancellable?
     
@@ -408,6 +415,48 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                 reportedAt: Date().addingTimeInterval(-1400),
                 isVerified: false,
                 description: "Submerged transformer sparking in standing water. Electrocution risk."
+            )
+        ]
+        
+        shelters = [
+            ReliefShelter(
+                name: "NDMA St. Joseph Relief Camp & Medical Base",
+                latitude: 11.6960,
+                longitude: 76.1480,
+                capacity: 500,
+                currentOccupancy: 214,
+                suppliesStatus: "Food Rations, Clean Water & 4 Doctors on site",
+                contactPhone: "+91 94471 23456"
+            ),
+            ReliefShelter(
+                name: "Government Higher Secondary School Shelter",
+                latitude: 11.6780,
+                longitude: 76.1240,
+                capacity: 350,
+                currentOccupancy: 310,
+                suppliesStatus: "Nearly Full - Blankets & First Aid Available",
+                contactPhone: "+91 94471 88990"
+            )
+        ]
+        
+        ndrfUnits = [
+            NdrfRescueUnit(
+                unitName: "10th Bn NDRF (Airborne Helo Rescue)",
+                battalion: "10th Battalion NDRF",
+                type: "Airborne Winch & Flood Extraction",
+                latitude: 11.6930,
+                longitude: 76.1390,
+                status: "En Route to Incident #1",
+                assignedVictimId: signals.first?.id
+            ),
+            NdrfRescueUnit(
+                unitName: "SDRF Fast Response Watercraft Unit",
+                battalion: "State Disaster Response Force",
+                type: "Inflatable Power Boat & Life Rafts",
+                latitude: 11.6840,
+                longitude: 76.1300,
+                status: "On-Scene Conducting Extraction",
+                assignedVictimId: nil
             )
         ]
         
