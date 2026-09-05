@@ -154,29 +154,52 @@ class UplinkGatewayManager(
                     } else if (line.startsWith("data: ")) {
                         val dataJson = line.removePrefix("data: ")
                         try {
-                            val json = JSONObject(dataJson)
-                            val title = json.optString("title", "GOVERNMENT BROADCAST")
-                            val message = json.optString("message", json.optString("instructions", "New directive received."))
-                            val targetArea = json.optString("targetArea", json.optString("district", "All Regions"))
-                            val priority = json.optString("priority", json.optString("severity", "HIGH"))
-                            val isEmergency = (currentEvent == "emergency_activated") || priority.contains("Critical", true)
+                            if (currentEvent == "connected" || currentEvent == "heartbeat" || currentEvent == "ping") {
+                                Log.d(TAG, "Gateway SSE handshake established: $dataJson")
+                                continue
+                            }
 
-                            _connectionState.value = _connectionState.value.copy(
-                                isEmergencyActiveFromGov = isEmergency,
-                                activeDistrictAlert = targetArea,
-                                alertHeadline = title,
-                                alertInstructions = "$priority: $message"
-                            )
-
-                            // Trigger real-time system notification on citizen phone!
-                            if (context != null) {
-                                GarudaNotificationManager.showHeadsUpNotification(
-                                    context = context,
-                                    title = title,
-                                    message = message,
-                                    targetArea = targetArea,
-                                    isEmergency = isEmergency
+                            if (currentEvent == "emergency_deactivated") {
+                                _connectionState.value = _connectionState.value.copy(
+                                    isEmergencyActiveFromGov = false,
+                                    activeDistrictAlert = "Standby",
+                                    alertHeadline = "",
+                                    alertInstructions = ""
                                 )
+                                if (context != null) {
+                                    GarudaNotificationManager.dismissEmergencyNotification(context)
+                                }
+                                continue
+                            }
+
+                            // Only process valid broadcast events
+                            if (currentEvent == "emergency_activated" || currentEvent == "push_notification") {
+                                val json = JSONObject(dataJson)
+                                val title = json.optString("title", "")
+                                val message = json.optString("message", json.optString("instructions", ""))
+                                val targetArea = json.optString("targetArea", json.optString("district", "All Regions"))
+                                val priority = json.optString("priority", json.optString("severity", "HIGH"))
+                                val isEmergency = (currentEvent == "emergency_activated") || priority.contains("Critical", true)
+
+                                if (title.isNotEmpty() || message.isNotEmpty()) {
+                                    _connectionState.value = _connectionState.value.copy(
+                                        isEmergencyActiveFromGov = isEmergency,
+                                        activeDistrictAlert = targetArea,
+                                        alertHeadline = title,
+                                        alertInstructions = if (priority.isNotEmpty()) "$priority: $message" else message
+                                    )
+
+                                    // Trigger real-time system notification on citizen phone
+                                    if (context != null) {
+                                        GarudaNotificationManager.showHeadsUpNotification(
+                                            context = context,
+                                            title = title.ifEmpty { "Government Alert" },
+                                            message = message.ifEmpty { "Emergency broadcast received." },
+                                            targetArea = targetArea,
+                                            isEmergency = isEmergency
+                                        )
+                                    }
+                                }
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error parsing SSE event: $e")

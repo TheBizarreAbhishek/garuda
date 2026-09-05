@@ -10,8 +10,8 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var activeDevices: [ConnectedDevice] = []
     @Published public var notifications: [PushNotificationRecord] = []
     @Published public var selectedSignal: SosSignal?
-    @Published public var isEmergencyBroadcastActive: Bool = true
-    @Published public var activeDistrict: String = "Wayanad / Kerala Region"
+    @Published public var isEmergencyBroadcastActive: Bool = false
+    @Published public var activeDistrict: String = "All Regions (Standby)"
     @Published public var isSimulatingMeshArrivals: Bool = false
     @Published public var connectedClientsCount: Int = 0
     @Published public var serverPort: UInt16 = 8080
@@ -131,38 +131,59 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     public func broadcastEmergencyActivation(
         title: String,
         severity: String,
-        district: String,
+        districts: [String],
         instructions: String
     ) {
-        let newAlert = DisasterAlert(
-            title: title,
-            severity: severity,
-            targetDistrict: district,
-            instructions: instructions,
-            isEmergencyActive: true
-        )
-        // If alert for same district exists, update it, else insert
-        if let existingIdx = alerts.firstIndex(where: { $0.targetDistrict.lowercased() == district.lowercased() }) {
-            alerts[existingIdx] = newAlert
-        } else {
-            alerts.insert(newAlert, at: 0)
+        guard !districts.isEmpty else { return }
+        
+        for district in districts {
+            let newAlert = DisasterAlert(
+                title: title,
+                severity: severity,
+                targetDistrict: district,
+                instructions: instructions,
+                isEmergencyActive: true
+            )
+            // If alert for same district exists, update it, else insert at top
+            if let existingIdx = alerts.firstIndex(where: { $0.targetDistrict.lowercased() == district.lowercased() }) {
+                alerts[existingIdx] = newAlert
+            } else {
+                alerts.insert(newAlert, at: 0)
+            }
+            
+            // Sync to Firebase Firestore
+            FirebaseFirestoreClient.shared.publishEmergencyActivation(alert: newAlert)
         }
+        
         isEmergencyBroadcastActive = true
-        activeDistrict = district
+        let activeList = alerts.filter { $0.isEmergencyActive }.map { $0.targetDistrict }
+        activeDistrict = activeList.joined(separator: ", ")
         
-        // 1. Publish to Firebase Firestore in Cloud
-        FirebaseFirestoreClient.shared.publishEmergencyActivation(alert: newAlert)
-        
-        // 2. Broadcast over live SSE network to all connected Android citizen phones
+        // Broadcast over SSE to connected phones
         CommandGridServer.shared.broadcastSseEvent(
             event: "emergency_activated",
             data: [
                 "title": title,
                 "severity": severity,
-                "district": district,
+                "district": activeDistrict,
+                "districts": districts,
                 "instructions": instructions,
                 "timestamp": Date().timeIntervalSince1970
             ]
+        )
+    }
+    
+    public func broadcastEmergencyActivation(
+        title: String,
+        severity: String,
+        district: String,
+        instructions: String
+    ) {
+        broadcastEmergencyActivation(
+            title: title,
+            severity: severity,
+            districts: [district],
+            instructions: instructions
         )
     }
     
@@ -190,11 +211,13 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         if let idx = alerts.firstIndex(where: { $0.id == id }) {
             alerts[idx].isEmergencyActive = false
         }
-        let activeCount = alerts.filter { $0.isEmergencyActive }.count
-        if activeCount == 0 {
+        let activeRemaining = alerts.filter { $0.isEmergencyActive }
+        if activeRemaining.isEmpty {
             isEmergencyBroadcastActive = false
             activeDistrict = "All Regions (Standby)"
             FirebaseFirestoreClient.shared.deactivateEmergencyOnCloud()
+        } else {
+            activeDistrict = activeRemaining.map { $0.targetDistrict }.joined(separator: ", ")
         }
     }
     
@@ -204,10 +227,25 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         priority: String,
         targetArea: String
     ) {
+        sendAreaPushNotification(
+            title: title,
+            message: message,
+            priority: priority,
+            targetAreas: [targetArea]
+        )
+    }
+    
+    public func sendAreaPushNotification(
+        title: String,
+        message: String,
+        priority: String,
+        targetAreas: [String]
+    ) {
+        let joinedTarget = targetAreas.isEmpty ? "Pan-India" : targetAreas.joined(separator: ", ")
         let newNotif = PushNotificationRecord(
             title: title,
             message: message,
-            targetArea: targetArea,
+            targetArea: joinedTarget,
             priority: priority,
             timestamp: Date(),
             deliveredCount: max(1, activeDevices.count)
@@ -223,7 +261,8 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                 "title": title,
                 "message": message,
                 "priority": priority,
-                "targetArea": targetArea,
+                "targetArea": joinedTarget,
+                "targetAreas": targetAreas,
                 "timestamp": Date().timeIntervalSince1970
             ]
         )
@@ -347,16 +386,7 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
             )
         ]
         
-        alerts = [
-            DisasterAlert(
-                title: "Flash Flood & Landslide Red Alert",
-                severity: "SEVERE EMERGENCY",
-                targetDistrict: "Wayanad / Calicut District",
-                instructions: "NDMA Directive: Immediate evacuation of low-lying flood zones. Offline BLE Mesh Activated on all citizen devices.",
-                timestamp: Date().addingTimeInterval(-3600),
-                isEmergencyActive: true
-            )
-        ]
+        alerts = []
         
         hazards = [
             HazardReport(

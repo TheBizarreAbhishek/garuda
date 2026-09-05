@@ -13,12 +13,19 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.project.garuda.MainActivity
+import java.util.concurrent.ConcurrentHashMap
 
 object GarudaNotificationManager {
 
     private const val TAG = "GarudaNotification"
     const val CHANNEL_EMERGENCY_ALERTS = "garuda_emergency_alerts"
     const val CHANNEL_CITIZEN_NOTIFICATIONS = "garuda_citizen_notifications"
+
+    private const val EMERGENCY_NOTIFICATION_ID = 9001
+    private const val DEDUPLICATION_WINDOW_MS = 15_000L // 15 seconds debounce window
+
+    // Deduplication cache to prevent dual notifications when both SSE and Firestore/FCM deliver the same alert
+    private val recentNotificationTimestamps = ConcurrentHashMap<String, Long>()
 
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -73,10 +80,38 @@ object GarudaNotificationManager {
         targetArea: String = "Your Region",
         isEmergency: Boolean = false
     ) {
+        // --- DEDUPLICATION CHECK ---
+        val dedupKey = "$isEmergency|$title|$targetArea"
+        val currentTime = System.currentTimeMillis()
+        val lastSeen = recentNotificationTimestamps[dedupKey] ?: 0L
+
+        if (currentTime - lastSeen < DEDUPLICATION_WINDOW_MS) {
+            Log.d(TAG, "Suppressed duplicate notification within deduplication window: $dedupKey")
+            return
+        }
+        recentNotificationTimestamps[dedupKey] = currentTime
+
+        // Clean up old entries from cache
+        if (recentNotificationTimestamps.size > 50) {
+            val iterator = recentNotificationTimestamps.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                if (currentTime - entry.value > 60_000L) {
+                    iterator.remove()
+                }
+            }
+        }
+
         createNotificationChannels(context)
 
         val channelId = if (isEmergency) CHANNEL_EMERGENCY_ALERTS else CHANNEL_CITIZEN_NOTIFICATIONS
-        val notificationId = (System.currentTimeMillis() % 100000).toInt()
+        
+        // Stable notification ID so subsequent updates update in-place rather than stacking duplicates
+        val notificationId = if (isEmergency) {
+            EMERGENCY_NOTIFICATION_ID
+        } else {
+            (title.hashCode() xor targetArea.hashCode()).and(0x7FFFFFFF)
+        }
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -108,11 +143,20 @@ object GarudaNotificationManager {
 
         try {
             NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-            Log.d(TAG, "Successfully showed notification: '$title' for target [$targetArea]")
+            Log.d(TAG, "Successfully showed single deduplicated notification: '$title' for target [$targetArea]")
         } catch (e: SecurityException) {
             Log.e(TAG, "POST_NOTIFICATIONS permission not granted (Android 13+)", e)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to display notification", e)
+        }
+    }
+
+    fun dismissEmergencyNotification(context: Context) {
+        try {
+            NotificationManagerCompat.from(context).cancel(EMERGENCY_NOTIFICATION_ID)
+            Log.d(TAG, "Dismissed emergency notification upon standby/deactivation")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to dismiss emergency notification", e)
         }
     }
 }

@@ -155,9 +155,9 @@ class FirebaseCloudGateway(
                         isConnected = true,
                         lastSyncTimestamp = System.currentTimeMillis(),
                         isEmergencyActive = isEmergency,
-                        alertHeadline = title,
-                        alertDistrict = district,
-                        alertInstructions = "$severity: $instructions"
+                        alertHeadline = if (isEmergency) title else "",
+                        alertDistrict = if (isEmergency) district else "Standby",
+                        alertInstructions = if (isEmergency) "$severity: $instructions" else ""
                     )
 
                     if (isNewEmergencyAlert) {
@@ -171,6 +171,8 @@ class FirebaseCloudGateway(
                                 isEmergency = true
                             )
                         }
+                    } else if (!isEmergency && context != null) {
+                        com.project.garuda.notification.GarudaNotificationManager.dismissEmergencyNotification(context)
                     }
                 }
             } else if (connection.responseCode == 404) {

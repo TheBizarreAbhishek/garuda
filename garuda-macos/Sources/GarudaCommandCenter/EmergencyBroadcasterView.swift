@@ -1,40 +1,62 @@
 import SwiftUI
 
+// MARK: - Selected Geo Region Model
+public struct SelectedGeoRegion: Identifiable, Hashable, Sendable {
+    public var id: String { "\(district), \(state)" }
+    public let state: String
+    public let district: String
+    
+    public init(state: String, district: String) {
+        self.state = state
+        self.district = district
+    }
+    
+    public var displayName: String {
+        if state == "National / Pan-India" || state.isEmpty {
+            return district
+        }
+        return "\(district), \(state)"
+    }
+}
+
 public struct EmergencyBroadcasterView: View {
     @ObservedObject var store: CommandCenterStore
     
     // =========================================================================
-    // SECTION 1: Emergency Declaration States
+    // SECTION 1: Emergency Declaration States (Multi-Region Selection)
     // =========================================================================
     @State private var alertTitle: String = "Flash Flood & Inundation Immediate Evacuation Alert"
-    @State private var selectedState: String = "Bihar"
-    @State private var selectedDistrict: String = "Jehanabad"
     @State private var severityLevel: String = "Level 3 - Critical / Red Alert"
     @State private var alertMessage: String = "NDMA DIRECTIVE: Rapidly rising flood waters. Evacuate low-lying areas immediately. Keep Bluetooth Mesh enabled for beacon relay."
+    
+    // Multi-Region Staged List (Initialized empty - NO hardcoded bias)
+    @State private var stagedEmergencyRegions: [SelectedGeoRegion] = []
+    
+    // Search & Picker States for Section 1
     @State private var geoSearchText: String = ""
+    @State private var pickerSelectedState: String = ""
+    @State private var pickerSelectedDistrict: String = ""
     @State private var showDeclarationToast: String?
     
     // =========================================================================
-    // SECTION 3: Targeted Push Notification States
+    // SECTION 3: Targeted Push Notification States (Multi-Target Selection)
     // =========================================================================
-    @State private var notifTargetScope: String = "Specific District" // "Specific District", "Pan-India", "Active Mesh Nodes"
-    @State private var notifSelectedState: String = "Bihar"
-    @State private var notifSelectedDistrict: String = "Jehanabad"
+    @State private var notifTargetScope: String = "Active Emergency Zones" // "Active Emergency Zones", "Custom Regions", "Pan-India", "Active Mesh Nodes"
+    @State private var stagedNotifRegions: [SelectedGeoRegion] = []
     @State private var notifGeoSearchText: String = ""
-    @State private var notifTitle: String = "NDMA Immediate Weather Advisory"
-    @State private var notifMessage: String = "Heavy rainfall and flash flood alert issued for the next 6 hours. Stay tuned to mesh broadcast."
-    @State private var notifPriority: String = "HIGH - Urgent Alert"
+    @State private var notifPickerSelectedState: String = ""
+    @State private var notifPickerSelectedDistrict: String = ""
+    @State private var notifTitle: String = "NDMA Immediate Evacuation & Safety Advisory"
+    @State private var notifMessage: String = "Move to higher ground or nearest relief camp immediately. Keep phone battery saver enabled."
+    @State private var notifPriority: String = "CRITICAL - Highest Priority"
     @State private var showNotifToast: String?
     
-    // Helpers for Section 1
-    private var targetedGeofenceString: String {
-        if selectedState == "National / Pan-India" {
-            return selectedDistrict
-        } else {
-            return "\(selectedDistrict), \(selectedState)"
-        }
+    // Computed active emergency alerts from store
+    private var activeAlerts: [DisasterAlert] {
+        store.alerts.filter { $0.isEmergencyActive }
     }
     
+    // Filtered search results for Section 1
     private var filteredGeoSearchResults: [(state: String, district: String)] {
         guard !geoSearchText.isEmpty else { return [] }
         var results: [(state: String, district: String)] = []
@@ -50,22 +72,7 @@ public struct EmergencyBroadcasterView: View {
         return results
     }
     
-    // Helpers for Section 3
-    private var notifTargetedGeofenceString: String {
-        switch notifTargetScope {
-        case "Pan-India":
-            return "Pan-India (All Registered Nodes)"
-        case "Active Mesh Nodes":
-            return "All Connected Online Field Nodes"
-        default:
-            if notifSelectedState == "National / Pan-India" {
-                return notifSelectedDistrict
-            } else {
-                return "\(notifSelectedDistrict), \(notifSelectedState)"
-            }
-        }
-    }
-    
+    // Filtered search results for Section 3
     private var notifFilteredGeoSearchResults: [(state: String, district: String)] {
         guard !notifGeoSearchText.isEmpty else { return [] }
         var results: [(state: String, district: String)] = []
@@ -81,96 +88,143 @@ public struct EmergencyBroadcasterView: View {
         return results
     }
     
-    private var activeAlerts: [DisasterAlert] {
-        store.alerts.filter { $0.isEmergencyActive }
+    // Computed description of targeted push recipients
+    private var notifTargetSummaryString: String {
+        switch notifTargetScope {
+        case "Active Emergency Zones":
+            if activeAlerts.isEmpty {
+                return "All Disaster Standby Zones (No Active Emergencies)"
+            } else {
+                let names = activeAlerts.map { $0.targetDistrict }
+                return "\(names.count) Active Emergency Zone(s): " + names.joined(separator: ", ")
+            }
+        case "Pan-India":
+            return "Pan-India (All Registered Citizen Devices)"
+        case "Active Mesh Nodes":
+            return "All Live Connected Online Field Mesh Nodes"
+        case "Custom Regions":
+            if stagedNotifRegions.isEmpty {
+                return "No Regions Selected (Select from search or dropdown below)"
+            } else {
+                return stagedNotifRegions.map { $0.displayName }.joined(separator: "; ")
+            }
+        default:
+            return notifTargetScope
+        }
     }
     
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                // Header Banner
-                HStack(spacing: 14) {
+                // =============================================================
+                // 1. TOP COMMAND HEADER
+                // =============================================================
+                HStack(spacing: 16) {
                     ZStack {
                         Circle()
-                            .fill(store.isEmergencyBroadcastActive ? Color.red.opacity(0.2) : Color.green.opacity(0.2))
+                            .fill(activeAlerts.isEmpty ? Color.green.opacity(0.18) : Color.red.opacity(0.2))
                             .frame(width: 48, height: 48)
                         Image(systemName: "antenna.radiowaves.left.and.right")
                             .font(.title2.bold())
-                            .foregroundColor(store.isEmergencyBroadcastActive ? .red : .green)
+                            .foregroundColor(activeAlerts.isEmpty ? .green : .red)
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Government Emergency Command & Broadcast Hub")
+                        Text("Government Emergency Command & Multi-Region Broadcast Hub")
                             .font(.title2.bold())
-                        Text("National Disaster Management Authority (NDMA) Unified Multi-Region Broadcast Grid")
+                        Text("National Disaster Management Authority (NDMA) Unified All-India Multi-Zone Dispatcher")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
+                    
                     Spacer()
                     
-                    // Live Status Pill
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(store.isEmergencyBroadcastActive ? Color.red : Color.green)
-                            .frame(width: 9, height: 9)
-                        Text(store.isEmergencyBroadcastActive 
-                             ? "\(activeAlerts.count) ACTIVE EMERGENCY ZONE(S)" 
-                             : "SYSTEM STANDBY")
-                            .font(.caption.bold())
-                            .foregroundColor(store.isEmergencyBroadcastActive ? .red : .green)
+                    // Live Status Badges
+                    HStack(spacing: 12) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(activeAlerts.isEmpty ? Color.green : Color.red)
+                                .frame(width: 8, height: 8)
+                            Text(activeAlerts.isEmpty ? "SYSTEM STANDBY" : "ACTIVE EMERGENCY (\(activeAlerts.count) ZONES)")
+                                .font(.caption.bold())
+                                .foregroundColor(activeAlerts.isEmpty ? .green : .red)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.35))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(activeAlerts.isEmpty ? Color.green.opacity(0.4) : Color.red.opacity(0.5), lineWidth: 1))
+                        
+                        if !activeAlerts.isEmpty {
+                            Button {
+                                store.broadcastEmergencyDeactivation()
+                                stagedEmergencyRegions.removeAll()
+                                withAnimation {
+                                    showDeclarationToast = "🛡️ All Active Emergency Declarations Revoked. System is in Global Standby."
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "shield.slash")
+                                    Text("Deactivate All")
+                                        .font(.caption.bold())
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.2))
+                                .foregroundColor(.red)
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .help("Revoke all active emergencies across all regions and return to standby")
+                        }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(0.35))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(store.isEmergencyBroadcastActive ? Color.red.opacity(0.4) : Color.green.opacity(0.4), lineWidth: 1))
                 }
-                .padding()
+                .padding(18)
                 .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 
-                // =========================================================================
-                // SECTION 1: EMERGENCY DECLARATION & ACTIVATION (SPECIFIC REGION)
-                // =========================================================================
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Label("1. Declare Emergency in Specific Region", systemImage: "exclamationmark.triangle.fill")
+                // =============================================================
+                // 2. SECTION 1: DECLARE EMERGENCY IN SPECIFIC / MULTIPLE REGIONS
+                // =============================================================
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .center) {
+                        Label("1. Declare Emergency (Single or Multiple Regions)", systemImage: "exclamationmark.triangle.fill")
                             .font(.title3.bold())
                             .foregroundColor(.red)
                         Spacer()
-                        Text("Geofenced Disaster Activation")
-                            .font(.caption.bold())
+                        Text("Multi-Zone Geofenced Activation")
+                            .font(.subheadline.bold())
                             .foregroundColor(.secondary)
                     }
                     
-                    // Quick Disaster Scenario Templates
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("QUICK SCENARIO TEMPLATES")
-                            .font(.system(size: 10, weight: .bold))
+                    // Quick Scenario Presets
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("QUICK DISASTER SCENARIO PRESETS")
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.secondary)
                         
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                            PresetChip(title: "🌊 Flash Flood", color: .blue) {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ScenarioPresetButton(title: "🌊 Flash Flood", color: .blue) {
                                 alertTitle = "Flash Flood & Inundation Immediate Evacuation Alert"
                                 severityLevel = "Level 3 - Critical / Red Alert"
                                 alertMessage = "NDMA DIRECTIVE: Rapidly rising flood waters. Evacuate low-lying areas immediately. Keep Bluetooth Mesh enabled for beacon relay."
                             }
-                            PresetChip(title: "🏔️ Landslide", color: .brown) {
+                            ScenarioPresetButton(title: "🏔️ Landslide", color: .brown) {
                                 alertTitle = "Massive Landslide & Slope Collapse Alert"
                                 severityLevel = "Level 3 - Critical / Red Alert"
                                 alertMessage = "DISASTER DIRECTIVE: Hillside slope failure reported. Evacuate vulnerable structures. Do not use bridges or riverbank roads."
                             }
-                            PresetChip(title: "🏚️ Earthquake", color: .orange) {
+                            ScenarioPresetButton(title: "🏚️ Earthquake", color: .orange) {
                                 alertTitle = "Major Earthquake Seismic Warning"
                                 severityLevel = "Level 3 - Critical / Red Alert"
                                 alertMessage = "NDMA ALERT: High-magnitude seismic shocks. Stay in open areas away from buildings. Emergency rescue teams deploying."
                             }
-                            PresetChip(title: "🔥 Fire Hazard", color: .red) {
+                            ScenarioPresetButton(title: "🔥 Fire Hazard", color: .red) {
                                 alertTitle = "Severe Industrial & Forest Fire Warning"
                                 severityLevel = "Level 2 - High Alert / Orange"
                                 alertMessage = "EVACUATION ORDER: Severe fire perimeter spreading. Follow designated escape corridors to safe relief camps."
                             }
-                            PresetChip(title: "🌪️ Cyclone / Storm", color: .purple) {
+                            ScenarioPresetButton(title: "🌪️ Cyclone / Storm", color: .purple) {
                                 alertTitle = "Severe Tropical Cyclone & Gale Wind Alert"
                                 severityLevel = "Level 3 - Critical / Red Alert"
                                 alertMessage = "NDMA WARNING: Extreme wind speeds and storm surge. Seek refuge in pucca cyclone shelters immediately."
@@ -180,18 +234,30 @@ public struct EmergencyBroadcasterView: View {
                     
                     Divider()
                     
-                    // Target Geofence Picker
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("SELECT TARGET STATE & DISTRICT")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.secondary)
+                    // Multi-Region Selector Box
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("SELECT & ADD TARGET REGIONS (28 STATES & 8 UTs)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            if !stagedEmergencyRegions.isEmpty {
+                                Button("Clear Selected Regions") {
+                                    stagedEmergencyRegions.removeAll()
+                                }
+                                .font(.caption.bold())
+                                .foregroundColor(.red)
+                                .buttonStyle(.plain)
+                            }
+                        }
                         
-                        // Universal Search Bar
-                        HStack(spacing: 8) {
+                        // Universal Instant Search Across All India
+                        HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundColor(.secondary)
-                            TextField("Search any Indian State or District (e.g. Jehanabad, Wayanad, Pune, Chamoli)...", text: $geoSearchText)
+                            TextField("Search any Indian district or state (e.g. Wayanad, Chamoli, Pune, Patna, Shimla, Darjeeling)...", text: $geoSearchText)
                                 .textFieldStyle(.plain)
+                                .font(.body)
                             if !geoSearchText.isEmpty {
                                 Button {
                                     geoSearchText = ""
@@ -202,44 +268,47 @@ public struct EmergencyBroadcasterView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(8)
+                        .padding(10)
                         .background(Color(NSColor.controlBackgroundColor))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
                         
-                        // Search Results Dropdown
+                        // Search Suggestions Dropdown (if searching)
                         if !geoSearchText.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
                                 if filteredGeoSearchResults.isEmpty {
                                     Text("No matching Indian districts found for '\(geoSearchText)'")
-                                        .font(.caption)
+                                        .font(.subheadline)
                                         .foregroundColor(.secondary)
                                         .padding(8)
                                 } else {
-                                    ForEach(filteredGeoSearchResults.prefix(8), id: \.district) { res in
+                                    ForEach(filteredGeoSearchResults.prefix(6), id: \.district) { res in
+                                        let isAlreadyAdded = stagedEmergencyRegions.contains(where: { $0.district == res.district && $0.state == res.state })
                                         Button {
-                                            selectedState = res.state
-                                            selectedDistrict = res.district
+                                            if !isAlreadyAdded {
+                                                stagedEmergencyRegions.append(SelectedGeoRegion(state: res.state, district: res.district))
+                                            }
                                             geoSearchText = ""
                                         } label: {
                                             HStack {
-                                                Image(systemName: "mappin.circle.fill")
-                                                    .foregroundColor(.red)
+                                                Image(systemName: isAlreadyAdded ? "checkmark.circle.fill" : "plus.circle.fill")
+                                                    .foregroundColor(isAlreadyAdded ? .green : .red)
                                                 Text(res.district)
-                                                    .font(.system(size: 12, weight: .bold))
+                                                    .font(.subheadline.bold())
                                                 Text("(\(res.state))")
                                                     .font(.caption)
                                                     .foregroundColor(.secondary)
                                                 Spacer()
-                                                Text("Select")
-                                                    .font(.caption2.bold())
-                                                    .foregroundColor(.blue)
+                                                Text(isAlreadyAdded ? "Added" : "+ Add to Emergency List")
+                                                    .font(.caption.bold())
+                                                    .foregroundColor(isAlreadyAdded ? .green : .red)
                                             }
-                                            .padding(6)
+                                            .padding(8)
                                             .background(Color.white.opacity(0.04))
                                             .cornerRadius(6)
                                         }
                                         .buttonStyle(.plain)
+                                        .disabled(isAlreadyAdded)
                                     }
                                 }
                             }
@@ -247,60 +316,118 @@ public struct EmergencyBroadcasterView: View {
                             .background(Color.black.opacity(0.4))
                             .cornerRadius(8)
                         } else {
+                            // State & District Dropdowns for manual selection
                             HStack(spacing: 12) {
                                 // State Dropdown
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("1. State / Union Territory").font(.caption2.bold()).foregroundColor(.secondary)
-                                    Picker("", selection: $selectedState) {
+                                    Text("State / UT").font(.caption.bold()).foregroundColor(.secondary)
+                                    Picker("", selection: $pickerSelectedState) {
+                                        Text("Select State / UT...").tag("")
                                         ForEach(IndiaGeoData.states) { stateObj in
                                             Text(stateObj.stateName).tag(stateObj.stateName)
                                         }
                                     }
                                     .labelsHidden()
-                                    .onChange(of: selectedState) { _, newState in
-                                        if let firstDist = IndiaGeoData.states.first(where: { $0.stateName == newState })?.districts.first {
-                                            selectedDistrict = firstDist
-                                        }
+                                    .onChange(of: pickerSelectedState) { _, newState in
+                                        pickerSelectedDistrict = ""
                                     }
                                 }
+                                .frame(maxWidth: .infinity)
                                 
                                 // District Dropdown
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("2. Targeted District").font(.caption2.bold()).foregroundColor(.secondary)
-                                    let currentDistricts = IndiaGeoData.states.first(where: { $0.stateName == selectedState })?.districts ?? []
-                                    Picker("", selection: $selectedDistrict) {
+                                    Text("District").font(.caption.bold()).foregroundColor(.secondary)
+                                    let currentDistricts = IndiaGeoData.states.first(where: { $0.stateName == pickerSelectedState })?.districts ?? []
+                                    Picker("", selection: $pickerSelectedDistrict) {
+                                        Text(pickerSelectedState.isEmpty ? "Select State First..." : "Select District...").tag("")
                                         ForEach(currentDistricts, id: \.self) { dist in
                                             Text(dist).tag(dist)
                                         }
                                     }
                                     .labelsHidden()
+                                    .disabled(pickerSelectedState.isEmpty)
+                                }
+                                .frame(maxWidth: .infinity)
+                                
+                                // Add Button
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(" ").font(.caption)
+                                    Button {
+                                        guard !pickerSelectedState.isEmpty && !pickerSelectedDistrict.isEmpty else { return }
+                                        let newRegion = SelectedGeoRegion(state: pickerSelectedState, district: pickerSelectedDistrict)
+                                        if !stagedEmergencyRegions.contains(newRegion) {
+                                            stagedEmergencyRegions.append(newRegion)
+                                        }
+                                    } label: {
+                                        HStack(spacing: 5) {
+                                            Image(systemName: "plus")
+                                            Text("Add Region")
+                                                .fontWeight(.bold)
+                                        }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 7)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.red)
+                                    .disabled(pickerSelectedState.isEmpty || pickerSelectedDistrict.isEmpty)
                                 }
                             }
                         }
                         
-                        // Active Target Preview Badge
-                        HStack(spacing: 6) {
-                            Image(systemName: "target")
-                                .foregroundColor(.red)
-                            Text("Selected Activation Geofence:")
-                                .font(.caption.bold())
-                                .foregroundColor(.secondary)
-                            Text(targetedGeofenceString)
-                                .font(.caption.bold())
-                                .foregroundColor(.red)
-                            Spacer()
+                        // Selected Regions Chips Display
+                        if !stagedEmergencyRegions.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("STAGED REGIONS FOR ACTIVATION (\(stagedEmergencyRegions.count)):")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.red)
+                                
+                                FlowLayout(spacing: 8) {
+                                    ForEach(stagedEmergencyRegions) { region in
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "mappin.circle.fill")
+                                                .foregroundColor(.red)
+                                            Text(region.displayName)
+                                                .font(.subheadline.bold())
+                                            Button {
+                                                stagedEmergencyRegions.removeAll(where: { $0.id == region.id })
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.red.opacity(0.15))
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.red.opacity(0.4), lineWidth: 1))
+                                    }
+                                }
+                            }
+                            .padding(10)
+                            .background(Color.black.opacity(0.25))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } else {
+                            HStack {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.secondary)
+                                Text("No regions staged yet. Search any Indian district above or pick from dropdown to stage one or multiple disaster zones.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(8)
+                            .background(Color.white.opacity(0.03))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
-                        .padding(8)
-                        .background(Color.red.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     
                     Divider()
                     
                     // Severity & Headline
-                    HStack(spacing: 12) {
+                    HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Disaster Severity Level").font(.caption.bold())
+                            Text("Disaster Severity Level").font(.subheadline.bold())
                             Picker("", selection: $severityLevel) {
                                 Text("Level 3 - Critical / Red Alert (Immediate Evacuation)").tag("Level 3 - Critical / Red Alert")
                                 Text("Level 2 - High Alert / Orange (Preparedness)").tag("Level 2 - High Alert / Orange")
@@ -310,17 +437,17 @@ public struct EmergencyBroadcasterView: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Emergency Headline").font(.caption.bold())
-                            TextField("Enter alert title", text: $alertTitle)
+                            Text("Emergency Headline").font(.subheadline.bold())
+                            TextField("Enter headline...", text: $alertTitle)
                                 .textFieldStyle(.roundedBorder)
                         }
                     }
                     
                     // Directive
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Citizen Instructions & Evacuation Directive").font(.caption.bold())
+                        Text("Citizen Instructions & Evacuation Directive").font(.subheadline.bold())
                         TextEditor(text: $alertMessage)
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .frame(height: 70)
                             .padding(6)
                             .background(Color(nsColor: .controlBackgroundColor))
@@ -329,46 +456,51 @@ public struct EmergencyBroadcasterView: View {
                     }
                     
                     // Section 1 Action Buttons
-                    HStack(spacing: 14) {
+                    HStack(spacing: 16) {
+                        let regionCount = stagedEmergencyRegions.count
+                        let buttonTitle: String = {
+                            if regionCount == 0 {
+                                return "DECLARE EMERGENCY (Select Regions First)"
+                            } else if regionCount == 1 {
+                                return "DECLARE EMERGENCY IN [\(stagedEmergencyRegions[0].displayName)]"
+                            } else {
+                                return "DECLARE EMERGENCY IN [\(regionCount) SELECTED REGIONS]"
+                            }
+                        }()
+                        
                         Button {
+                            guard !stagedEmergencyRegions.isEmpty else { return }
+                            let districtStrings = stagedEmergencyRegions.map { $0.displayName }
                             store.broadcastEmergencyActivation(
                                 title: alertTitle,
                                 severity: severityLevel,
-                                district: targetedGeofenceString,
+                                districts: districtStrings,
                                 instructions: alertMessage
                             )
+                            let joinedNames = districtStrings.joined(separator: ", ")
                             withAnimation {
-                                showDeclarationToast = "🚨 Emergency Broadcast Activated in [\(targetedGeofenceString)]!"
+                                showDeclarationToast = "🚨 Emergency Broadcast Activated in [\(joinedNames)]!"
                             }
+                            stagedEmergencyRegions.removeAll()
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 8) {
                                 Image(systemName: "bolt.fill")
-                                Text("DECLARE EMERGENCY IN [\(selectedDistrict)]")
+                                Text(buttonTitle)
                                     .fontWeight(.bold)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.red)
                         .controlSize(.large)
+                        .disabled(stagedEmergencyRegions.isEmpty)
                         
-                        Button {
-                            store.broadcastEmergencyDeactivation()
-                            withAnimation {
-                                showDeclarationToast = "🛡️ All Active Emergencies Revoked. System is in Standby."
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "shield.slash")
-                                Text("Deactivate All / System Standby")
-                                    .fontWeight(.medium)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                        if !activeAlerts.isEmpty {
+                            Text("ℹ️ \(activeAlerts.count) zone(s) currently active. Declaring new regions will add them incrementally.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
                     }
                     
                     if let toast = showDeclarationToast {
@@ -386,14 +518,14 @@ public struct EmergencyBroadcasterView: View {
                         .transition(.opacity)
                     }
                 }
-                .padding()
+                .padding(18)
                 .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 
-                // =========================================================================
-                // SECTION 2: ACTIVE EMERGENCY ZONES (KAHA KAHA EMERGENCY ACTIVE HAI)
-                // =========================================================================
-                VStack(alignment: .leading, spacing: 14) {
+                // =============================================================
+                // 3. SECTION 2: ACTIVE EMERGENCY ZONES (MULTI-REGION MONITOR)
+                // =============================================================
+                VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Label("2. Active Emergency Zones", systemImage: "map.circle.fill")
                             .font(.title3.bold())
@@ -402,135 +534,163 @@ public struct EmergencyBroadcasterView: View {
                         Spacer()
                         
                         Text("\(activeAlerts.count) Area(s) Currently Active")
-                            .font(.caption.bold())
+                            .font(.subheadline.bold())
                             .foregroundColor(activeAlerts.isEmpty ? .secondary : .red)
                     }
                     
                     if activeAlerts.isEmpty {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 14) {
                             Image(systemName: "checkmark.shield.fill")
-                                .font(.title2)
+                                .font(.title)
                                 .foregroundColor(.green)
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 3) {
                                 Text("All 28 States & 8 UTs in Normal Standby")
                                     .font(.headline)
                                     .foregroundColor(.green)
-                                Text("No active disaster emergency declarations currently in force. Citizen nodes remain in ultra-low-power standby mode.")
-                                    .font(.caption)
+                                Text("No active disaster declarations currently in force. Citizen nodes remain in ultra-low-power standby mode.")
+                                    .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
                         }
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.green.opacity(0.1))
+                        .background(Color.green.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.green.opacity(0.25), lineWidth: 1))
                     } else {
-                        ForEach(activeAlerts) { alert in
-                            HStack(alignment: .top, spacing: 14) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.red.opacity(0.2))
-                                        .frame(width: 36, height: 36)
-                                    Image(systemName: "exclamationmark.octagon.fill")
-                                        .font(.headline)
-                                        .foregroundColor(.red)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text(alert.targetDistrict)
-                                            .font(.headline.bold())
+                        VStack(spacing: 12) {
+                            ForEach(activeAlerts) { alert in
+                                HStack(alignment: .top, spacing: 14) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.red.opacity(0.2))
+                                            .frame(width: 42, height: 42)
+                                        Image(systemName: "exclamationmark.octagon.fill")
+                                            .font(.title3)
                                             .foregroundColor(.red)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text(alert.targetDistrict)
+                                                .font(.headline.bold())
+                                                .foregroundColor(.red)
+                                            
+                                            Text("• \(alert.severity)")
+                                                .font(.subheadline.bold())
+                                                .foregroundColor(.orange)
+                                            
+                                            Spacer()
+                                            
+                                            Text(alert.timestamp.formatted(date: .omitted, time: .shortened))
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
                                         
-                                        Text("• \(alert.severity)")
-                                            .font(.caption.bold())
-                                            .foregroundColor(.orange)
+                                        Text(alert.title)
+                                            .font(.subheadline.weight(.semibold))
                                         
-                                        Spacer()
-                                        
-                                        Text(alert.timestamp.formatted(date: .omitted, time: .shortened))
-                                            .font(.caption2)
+                                        Text(alert.instructions)
+                                            .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
                                     
-                                    Text(alert.title)
-                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
                                     
-                                    Text(alert.instructions)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(2)
-                                }
-                                
-                                Spacer()
-                                
-                                // Direct Deactivate / End Emergency Button per District
-                                Button {
-                                    store.deactivateSpecificAlert(id: alert.id)
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "xmark.circle")
-                                        Text("End Emergency")
-                                            .font(.caption.bold())
+                                    // Individual Action Buttons for this specific district
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            notifTargetScope = "Custom Regions"
+                                            // Split district string if possible
+                                            let parts = alert.targetDistrict.components(separatedBy: ",")
+                                            let dist = parts.first?.trimmingCharacters(in: .whitespaces) ?? alert.targetDistrict
+                                            let state = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : ""
+                                            let newReg = SelectedGeoRegion(state: state, district: dist)
+                                            if !stagedNotifRegions.contains(newReg) {
+                                                stagedNotifRegions.append(newReg)
+                                            }
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "bell.badge")
+                                                Text("Send Push")
+                                                    .font(.caption.bold())
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 8)
+                                            .background(Color.blue.opacity(0.15))
+                                            .foregroundColor(.blue)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Target push notification to this active district")
+                                        
+                                        Button {
+                                            store.deactivateSpecificAlert(id: alert.id)
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "xmark.circle")
+                                                Text("End Emergency")
+                                                    .font(.caption.bold())
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(Color.red.opacity(0.15))
+                                            .foregroundColor(.red)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Revoke emergency status for this district and return to standby")
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.red.opacity(0.15))
-                                    .foregroundColor(.red)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
-                                .buttonStyle(.plain)
-                                .help("Revoke emergency status for this district and return to standby")
+                                .padding(14)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.red.opacity(0.3), lineWidth: 1))
                             }
-                            .padding(14)
-                            .background(Color(nsColor: .controlBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.red.opacity(0.3), lineWidth: 1))
                         }
                     }
                 }
-                .padding()
+                .padding(18)
                 .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 
-                // =========================================================================
-                // SECTION 3: TARGETED PUSH NOTIFICATION (SPECIFIC AREA MEIN BHEJNA)
-                // =========================================================================
-                VStack(alignment: .leading, spacing: 16) {
+                // =============================================================
+                // 4. SECTION 3: TARGETED PUSH NOTIFICATION DISPATCHER
+                // =============================================================
+                VStack(alignment: .leading, spacing: 18) {
                     HStack {
-                        Label("3. Dispatch Push Notification to Specific Area", systemImage: "bell.badge.fill")
+                        Label("3. Dispatch Targeted Push Notification", systemImage: "bell.badge.fill")
                             .font(.title3.bold())
                             .foregroundColor(.blue)
                         Spacer()
-                        Text("Firebase FCM + Mesh Uplink")
-                            .font(.caption.bold())
+                        Text("Firebase FCM + Field BLE Mesh Relay")
+                            .font(.subheadline.bold())
                             .foregroundColor(.secondary)
                     }
                     
                     // Quick Notification Presets
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("QUICK NOTIFICATION TEMPLATES")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.secondary)
                         
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                            PresetChip(title: "🏃 Evacuation Order", color: .red) {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ScenarioPresetButton(title: "🏃 Evacuation Order", color: .red) {
                                 notifTitle = "IMMEDIATE EVACUATION DIRECTIVE"
-                                notifMessage = "Move to higher ground or nearest designated shelter immediately. Emergency rescue in progress."
+                                notifMessage = "Move to higher ground or nearest designated shelter immediately. Emergency rescue teams deploying."
                                 notifPriority = "CRITICAL - Highest Priority"
                             }
-                            PresetChip(title: "⛺ Food & Relief Camp", color: .green) {
+                            ScenarioPresetButton(title: "⛺ Food & Relief Camp", color: .green) {
                                 notifTitle = "Relief Camp & Potable Water Distribution Open"
                                 notifMessage = "Community hall relief camp active with food, dry rations, and clean drinking water."
                                 notifPriority = "MEDIUM - Information"
                             }
-                            PresetChip(title: "🏥 Medical Aid Center", color: .cyan) {
+                            ScenarioPresetButton(title: "🏥 Medical Aid Center", color: .cyan) {
                                 notifTitle = "Emergency Medical & First Aid Post Established"
                                 notifMessage = "Medical teams and ambulances stationed at District Health Camp with trauma and first aid supplies."
                                 notifPriority = "HIGH - Urgent Alert"
                             }
-                            PresetChip(title: "⛈️ Weather Warning", color: .orange) {
+                            ScenarioPresetButton(title: "⛈️ Weather Warning", color: .orange) {
                                 notifTitle = "Severe Thunderstorm & Rainfall Warning"
                                 notifMessage = "Intense spells of rain expected in the next 3 hours. Avoid flood-prone culverts and loose power lines."
                                 notifPriority = "HIGH - Urgent Alert"
@@ -541,14 +701,17 @@ public struct EmergencyBroadcasterView: View {
                     Divider()
                     
                     // Target Scope Selection
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("TARGET RECIPIENT REGION / AREA").font(.system(size: 10, weight: .bold)).foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("TARGET RECIPIENT RECIPIENTS / SCOPE")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
                         
-                        HStack(spacing: 12) {
+                        HStack(spacing: 16) {
                             Picker("Scope", selection: $notifTargetScope) {
-                                Text("📍 Specific District / City").tag("Specific District")
-                                Text("🇮🇳 Pan-India (All Registered Nodes)").tag("Pan-India")
-                                Text("🌐 All Currently Connected Online Field Nodes").tag("Active Mesh Nodes")
+                                Text("⚡ Active Emergency Zones (\(activeAlerts.count))").tag("Active Emergency Zones")
+                                Text("📍 Custom Selected Regions").tag("Custom Regions")
+                                Text("🇮🇳 Pan-India").tag("Pan-India")
+                                Text("🌐 Online Field Mesh Nodes").tag("Active Mesh Nodes")
                             }
                             .pickerStyle(.segmented)
                             
@@ -557,18 +720,18 @@ public struct EmergencyBroadcasterView: View {
                                 Text("HIGH - Urgent Alert").tag("HIGH - Urgent Alert")
                                 Text("MEDIUM - Information").tag("MEDIUM - Information")
                             }
-                            .frame(width: 180)
+                            .frame(width: 200)
                         }
                         
-                        // IF "Specific District" is chosen, show State + District Pickers + Search Box
-                        if notifTargetScope == "Specific District" {
-                            VStack(alignment: .leading, spacing: 8) {
-                                // Notification Area Search Bar
-                                HStack(spacing: 8) {
+                        // If "Custom Regions" is selected: show multi-select search and dropdown
+                        if notifTargetScope == "Custom Regions" {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 10) {
                                     Image(systemName: "magnifyingglass")
                                         .foregroundColor(.secondary)
-                                    TextField("Search district to notify (e.g. Jehanabad, Patna, Wayanad, Pune)...", text: $notifGeoSearchText)
+                                    TextField("Search district or state to notify (e.g. Wayanad, Pune, Chamoli, Patna)...", text: $notifGeoSearchText)
                                         .textFieldStyle(.plain)
+                                        .font(.body)
                                     if !notifGeoSearchText.isEmpty {
                                         Button {
                                             notifGeoSearchText = ""
@@ -579,7 +742,7 @@ public struct EmergencyBroadcasterView: View {
                                         .buttonStyle(.plain)
                                     }
                                 }
-                                .padding(8)
+                                .padding(10)
                                 .background(Color(NSColor.controlBackgroundColor))
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
@@ -588,34 +751,37 @@ public struct EmergencyBroadcasterView: View {
                                     VStack(alignment: .leading, spacing: 4) {
                                         if notifFilteredGeoSearchResults.isEmpty {
                                             Text("No matching Indian districts found for '\(notifGeoSearchText)'")
-                                                .font(.caption)
+                                                .font(.subheadline)
                                                 .foregroundColor(.secondary)
                                                 .padding(6)
                                         } else {
                                             ForEach(notifFilteredGeoSearchResults.prefix(6), id: \.district) { res in
+                                                let isAdded = stagedNotifRegions.contains(where: { $0.district == res.district && $0.state == res.state })
                                                 Button {
-                                                    notifSelectedState = res.state
-                                                    notifSelectedDistrict = res.district
+                                                    if !isAdded {
+                                                        stagedNotifRegions.append(SelectedGeoRegion(state: res.state, district: res.district))
+                                                    }
                                                     notifGeoSearchText = ""
                                                 } label: {
                                                     HStack {
-                                                        Image(systemName: "bell.badge.fill")
-                                                            .foregroundColor(.blue)
+                                                        Image(systemName: isAdded ? "checkmark.circle.fill" : "plus.circle.fill")
+                                                            .foregroundColor(isAdded ? .green : .blue)
                                                         Text(res.district)
-                                                            .font(.system(size: 12, weight: .bold))
+                                                            .font(.subheadline.bold())
                                                         Text("(\(res.state))")
                                                             .font(.caption)
                                                             .foregroundColor(.secondary)
                                                         Spacer()
-                                                        Text("Select")
-                                                            .font(.caption2.bold())
-                                                            .foregroundColor(.blue)
+                                                        Text(isAdded ? "Added" : "+ Add to Recipients")
+                                                            .font(.caption.bold())
+                                                            .foregroundColor(isAdded ? .green : .blue)
                                                     }
-                                                    .padding(6)
+                                                    .padding(8)
                                                     .background(Color.white.opacity(0.04))
                                                     .cornerRadius(6)
                                                 }
                                                 .buttonStyle(.plain)
+                                                .disabled(isAdded)
                                             }
                                         }
                                     }
@@ -624,83 +790,117 @@ public struct EmergencyBroadcasterView: View {
                                     .cornerRadius(8)
                                 } else {
                                     HStack(spacing: 12) {
-                                        // State Dropdown
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("State / Region").font(.caption2.bold()).foregroundColor(.secondary)
-                                            Picker("", selection: $notifSelectedState) {
+                                            Text("State / UT").font(.caption.bold()).foregroundColor(.secondary)
+                                            Picker("", selection: $notifPickerSelectedState) {
+                                                Text("Select State / UT...").tag("")
                                                 ForEach(IndiaGeoData.states) { stateObj in
                                                     Text(stateObj.stateName).tag(stateObj.stateName)
                                                 }
                                             }
                                             .labelsHidden()
-                                            .onChange(of: notifSelectedState) { _, newState in
-                                                if let firstDist = IndiaGeoData.states.first(where: { $0.stateName == newState })?.districts.first {
-                                                    notifSelectedDistrict = firstDist
-                                                }
+                                            .onChange(of: notifPickerSelectedState) { _, _ in
+                                                notifPickerSelectedDistrict = ""
                                             }
                                         }
+                                        .frame(maxWidth: .infinity)
                                         
-                                        // District Dropdown
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Specific Targeted District").font(.caption2.bold()).foregroundColor(.secondary)
-                                            let currentDistricts = IndiaGeoData.states.first(where: { $0.stateName == notifSelectedState })?.districts ?? []
-                                            Picker("", selection: $notifSelectedDistrict) {
+                                            Text("District").font(.caption.bold()).foregroundColor(.secondary)
+                                            let currentDistricts = IndiaGeoData.states.first(where: { $0.stateName == notifPickerSelectedState })?.districts ?? []
+                                            Picker("", selection: $notifPickerSelectedDistrict) {
+                                                Text(notifPickerSelectedState.isEmpty ? "Select State First..." : "Select District...").tag("")
                                                 ForEach(currentDistricts, id: \.self) { dist in
                                                     Text(dist).tag(dist)
                                                 }
                                             }
                                             .labelsHidden()
+                                            .disabled(notifPickerSelectedState.isEmpty)
                                         }
+                                        .frame(maxWidth: .infinity)
                                         
-                                        // Quick Match Section 1 Button
-                                        Button {
-                                            notifSelectedState = selectedState
-                                            notifSelectedDistrict = selectedDistrict
-                                        } label: {
-                                            HStack(spacing: 4) {
-                                                Image(systemName: "arrow.triangle.2.circlepath")
-                                                Text("Match Section 1")
-                                                    .font(.caption2.bold())
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(" ").font(.caption)
+                                            Button {
+                                                guard !notifPickerSelectedState.isEmpty && !notifPickerSelectedDistrict.isEmpty else { return }
+                                                let newReg = SelectedGeoRegion(state: notifPickerSelectedState, district: notifPickerSelectedDistrict)
+                                                if !stagedNotifRegions.contains(newReg) {
+                                                    stagedNotifRegions.append(newReg)
+                                                }
+                                            } label: {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "plus")
+                                                    Text("Add Region")
+                                                        .fontWeight(.bold)
+                                                }
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 7)
                                             }
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 6)
+                                            .buttonStyle(.borderedProminent)
+                                            .tint(.blue)
+                                            .disabled(notifPickerSelectedState.isEmpty || notifPickerSelectedDistrict.isEmpty)
                                         }
-                                        .buttonStyle(.bordered)
-                                        .help("Copy current geofence from Section 1")
+                                    }
+                                }
+                                
+                                // Custom chips
+                                if !stagedNotifRegions.isEmpty {
+                                    FlowLayout(spacing: 8) {
+                                        ForEach(stagedNotifRegions) { region in
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "bell.badge.fill")
+                                                    .foregroundColor(.blue)
+                                                Text(region.displayName)
+                                                    .font(.subheadline.bold())
+                                                Button {
+                                                    stagedNotifRegions.removeAll(where: { $0.id == region.id })
+                                                } label: {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .foregroundColor(.secondary)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.blue.opacity(0.15))
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.blue.opacity(0.4), lineWidth: 1))
+                                        }
                                     }
                                 }
                             }
                         }
                         
                         // Active Target Preview Badge
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Image(systemName: "paperplane.fill")
                                 .foregroundColor(.blue)
                             Text("Notification Delivery Target:")
-                                .font(.caption.bold())
+                                .font(.subheadline.bold())
                                 .foregroundColor(.secondary)
-                            Text(notifTargetedGeofenceString)
-                                .font(.caption.bold())
+                            Text(notifTargetSummaryString)
+                                .font(.subheadline.bold())
                                 .foregroundColor(.blue)
+                                .lineLimit(2)
                             Spacer()
                         }
-                        .padding(8)
+                        .padding(10)
                         .background(Color.blue.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     
-                    // Notification Headline & Message
+                    // Title & Message
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Notification Title").font(.caption.bold())
+                        Text("Notification Title").font(.subheadline.bold())
                         TextField("Enter push notification title...", text: $notifTitle)
                             .textFieldStyle(.roundedBorder)
                     }
                     
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Notification Body / Message").font(.caption.bold())
+                        Text("Notification Body / Message").font(.subheadline.bold())
                         TextEditor(text: $notifMessage)
-                            .font(.system(size: 12))
-                            .frame(height: 60)
+                            .font(.system(size: 13))
+                            .frame(height: 65)
                             .padding(6)
                             .background(Color(nsColor: .controlBackgroundColor))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -708,25 +908,39 @@ public struct EmergencyBroadcasterView: View {
                     }
                     
                     // Action Button
-                    HStack(spacing: 14) {
+                    HStack(spacing: 16) {
                         Button {
+                            var targetList: [String] = []
+                            switch notifTargetScope {
+                            case "Active Emergency Zones":
+                                targetList = activeAlerts.map { $0.targetDistrict }
+                            case "Custom Regions":
+                                targetList = stagedNotifRegions.map { $0.displayName }
+                            case "Pan-India":
+                                targetList = ["Pan-India"]
+                            case "Active Mesh Nodes":
+                                targetList = ["Active Field Nodes"]
+                            default:
+                                targetList = [notifTargetScope]
+                            }
+                            
                             store.sendAreaPushNotification(
                                 title: notifTitle,
                                 message: notifMessage,
                                 priority: notifPriority,
-                                targetArea: notifTargetedGeofenceString
+                                targetAreas: targetList
                             )
                             withAnimation {
-                                showNotifToast = "📨 Push Notification successfully dispatched to [\(notifTargetedGeofenceString)]!"
+                                showNotifToast = "📨 Push Notification dispatched to [\(notifTargetSummaryString)]!"
                             }
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 8) {
                                 Image(systemName: "paperplane.fill")
-                                Text("SEND PUSH NOTIFICATION TO [\(notifTargetScope == "Specific District" ? notifSelectedDistrict : notifTargetedGeofenceString)]")
+                                Text("SEND PUSH NOTIFICATION")
                                     .fontWeight(.bold)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.blue)
@@ -747,49 +961,90 @@ public struct EmergencyBroadcasterView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .transition(.opacity)
                     }
-                    
-                    // Recent Dispatched Push Notifications Log
-                    if !store.notifications.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("RECENT DISPATCHED PUSH NOTIFICATIONS")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.secondary)
-                            
-                            ForEach(store.notifications.prefix(4)) { notif in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: "bell.fill")
-                                        .foregroundColor(.blue)
-                                        .font(.caption)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        HStack {
-                                            Text(notif.title).font(.caption.bold())
-                                            Spacer()
-                                            Text(notif.timestamp.formatted(date: .omitted, time: .shortened))
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        Text("Target: \(notif.targetArea) • Priority: \(notif.priority)")
-                                            .font(.caption2)
-                                            .foregroundColor(.blue)
-                                        Text(notif.message)
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .padding(8)
-                                .background(Color.black.opacity(0.2))
-                                .cornerRadius(6)
-                            }
-                        }
-                        .padding(.top, 4)
-                    }
                 }
-                .padding()
+                .padding(18)
                 .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .padding(16)
+            .padding(20)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.6))
+    }
+}
+
+// MARK: - Flow Layout for multi-region chips
+public struct FlowLayout: Layout {
+    public var spacing: CGFloat = 8
+    
+    public init(spacing: CGFloat = 8) {
+        self.spacing = spacing
+    }
+    
+    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 500
+        var height: CGFloat = 0
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var maxHeightInRow: CGFloat = 0
+        
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > width && currentX > 0 {
+                currentX = 0
+                currentY += maxHeightInRow + spacing
+                maxHeightInRow = 0
+            }
+            currentX += size.width + spacing
+            maxHeightInRow = max(maxHeightInRow, size.height)
+            height = max(height, currentY + maxHeightInRow)
+        }
+        return CGSize(width: width, height: max(height, maxHeightInRow))
+    }
+    
+    public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var currentX = bounds.minX
+        var currentY = bounds.minY
+        var maxHeightInRow: CGFloat = 0
+        
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > bounds.maxX && currentX > bounds.minX {
+                currentX = bounds.minX
+                currentY += maxHeightInRow + spacing
+                maxHeightInRow = 0
+            }
+            subview.place(at: CGPoint(x: currentX, y: currentY), proposal: ProposedViewSize(size))
+            currentX += size.width + spacing
+            maxHeightInRow = max(maxHeightInRow, size.height)
+        }
+    }
+}
+
+// MARK: - Quick Scenario Preset Button
+public struct ScenarioPresetButton: View {
+    public let title: String
+    public let color: Color
+    public let action: () -> Void
+    
+    public init(title: String, color: Color, action: @escaping () -> Void) {
+        self.title = title
+        self.color = color
+        self.action = action
+    }
+    
+    public var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.bold())
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 6)
+                .background(color.opacity(0.15))
+                .foregroundColor(color)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(color.opacity(0.35), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }
