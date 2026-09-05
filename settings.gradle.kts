@@ -25,4 +25,6 @@ dependencyResolutionManagement {
 rootProject.name = "Garuda"
 include(":app")
 include(":core:mesh")
+include(":core:data")
+
 
