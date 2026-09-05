@@ -32,12 +32,17 @@ public struct MainAppView: View {
     
     public var body: some View {
         NavigationSplitView {
-            VStack(spacing: 0) {
-                // Garuda Brand Header
+            VStack(spacing: 12) {
+                // 1. Garuda Brand Header Box Card
                 HStack(spacing: 10) {
-                    Image(systemName: "shield.checkered")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.blue)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.blue.opacity(0.25))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "shield.checkered")
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundColor(.blue)
+                    }
                     
                     VStack(alignment: .leading, spacing: 1) {
                         Text("PROJECT GARUDA")
@@ -50,148 +55,193 @@ public struct MainAppView: View {
                     
                     Spacer()
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color.black.opacity(0.15))
+                .padding(10)
+                .background(Color.blue.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                )
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
                 
-                Divider()
+                // 2. Navigation Items: Modular Boxed Cards
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(NavigationTab.allCases) { tab in
+                            Button {
+                                selectedTab = tab
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: tab.icon)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(selectedTab == tab ? .cyan : .secondary)
+                                        .frame(width: 18)
+                                    
+                                    Text(tab.rawValue)
+                                        .font(.system(size: 12, weight: selectedTab == tab ? .bold : .medium))
+                                        .foregroundColor(selectedTab == tab ? .white : .primary)
+                                    
+                                    Spacer()
+                                    
+                                    // Contextual Badges
+                                    switch tab {
+                                    case .liveMap, .triageKanban:
+                                        if !store.signals.isEmpty {
+                                            Text("\(store.signals.count)")
+                                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.red)
+                                                .foregroundColor(.white)
+                                                .clipShape(Capsule())
+                                        }
+                                    case .hazardReports:
+                                        if !store.hazards.isEmpty {
+                                            Text("\(store.hazards.count)")
+                                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.yellow.opacity(0.9))
+                                                .foregroundColor(.black)
+                                                .clipShape(Capsule())
+                                        }
+                                    case .emergencyBroadcast:
+                                        if store.isEmergencyBroadcastActive {
+                                            Circle()
+                                                .fill(Color.red)
+                                                .frame(width: 7, height: 7)
+                                        }
+                                    case .imdRadar:
+                                        Circle()
+                                            .fill(Color.cyan)
+                                            .frame(width: 6, height: 6)
+                                    case .meshTelemetry:
+                                        if store.activeDevices.count > 0 {
+                                            Circle()
+                                                .fill(Color.green)
+                                                .frame(width: 6, height: 6)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(selectedTab == tab ? Color.cyan.opacity(0.15) : Color.white.opacity(0.03))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(selectedTab == tab ? Color.cyan.opacity(0.5) : Color.white.opacity(0.06), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                }
                 
-                // Sidebar Navigation List with Badges
-                List(NavigationTab.allCases, selection: $selectedTab) { tab in
-                    NavigationLink(value: tab) {
+                Spacer()
+                
+                // 3. Bottom Status & Uplink Box Cards
+                VStack(spacing: 8) {
+                    // Box A: Emergency Mode Status Card
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Label(tab.rawValue, systemImage: tab.icon)
-                                .font(.system(size: 13, weight: .semibold))
+                            Circle()
+                                .fill(store.isEmergencyBroadcastActive ? Color.red : Color.green)
+                                .frame(width: 7, height: 7)
+                            Text(store.isEmergencyBroadcastActive ? "ACTIVE EMERGENCY" : "ALL SECTORS STANDBY")
+                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                .foregroundColor(store.isEmergencyBroadcastActive ? .red : .green)
+                            Spacer()
+                        }
+                        
+                        Text(store.activeDistrict)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(10)
+                    .background(store.isEmergencyBroadcastActive ? Color.red.opacity(0.10) : Color.green.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(store.isEmergencyBroadcastActive ? Color.red.opacity(0.35) : Color.green.opacity(0.25), lineWidth: 1)
+                    )
+                    
+                    // Box B: Gateway & Field Nodes Registry Card
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(store.isServerRunning ? Color.blue : Color.gray)
+                                .frame(width: 5, height: 5)
+                            Text("Gateway SSE: :\(String(store.serverPort))")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.secondary)
                             
                             Spacer()
                             
-                            // Contextual Tab Badges
-                            switch tab {
-                            case .liveMap, .triageKanban:
-                                if !store.signals.isEmpty {
-                                    Text("\(store.signals.count)")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color.red)
-                                        .foregroundColor(.white)
-                                        .clipShape(Capsule())
-                                }
-                            case .hazardReports:
-                                if !store.hazards.isEmpty {
-                                    Text("\(store.hazards.count)")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color.yellow.opacity(0.8))
-                                        .foregroundColor(.black)
-                                        .clipShape(Capsule())
-                                }
-                            case .emergencyBroadcast:
-                                if store.isEmergencyBroadcastActive {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 8, height: 8)
-                                }
-                            case .imdRadar:
-                                Circle()
-                                    .fill(Color.cyan)
-                                    .frame(width: 6, height: 6)
-                            case .meshTelemetry:
-                                if store.activeDevices.count > 0 {
-                                    Circle()
-                                        .fill(Color.green)
-                                        .frame(width: 7, height: 7)
-                                }
-                            }
+                            Text("Online")
+                                .font(.system(size: 8, weight: .black, design: .monospaced))
+                                .foregroundColor(.green)
                         }
-                    }
-                }
-                .listStyle(.sidebar)
-                
-                // Sidebar Footer Alert Status & Live Uplink Status
-                VStack(alignment: .leading, spacing: 8) {
-                    Divider()
-                    
-                    // Emergency Mode Indicator
-                    HStack {
-                        Circle()
-                            .fill(store.isEmergencyBroadcastActive ? Color.red : Color.green)
-                            .frame(width: 8, height: 8)
-                        Text(store.isEmergencyBroadcastActive ? "ACTIVE EMERGENCY" : "ALL SECTORS STANDBY")
-                            .font(.system(size: 10, weight: .black, design: .monospaced))
-                            .foregroundColor(store.isEmergencyBroadcastActive ? .red : .green)
-                    }
-                    Text(store.activeDistrict)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                    
-                    Divider()
-                    
-                    // Server Port Info
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(store.isServerRunning ? Color.blue : Color.gray)
-                            .frame(width: 6, height: 6)
-                        Text("Gateway SSE: :\(String(store.serverPort))")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.secondary)
                         
-                        Spacer()
+                        Divider().opacity(0.3)
                         
-                        Text("Online")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.green)
-                    }
-                    
-                    // Clickable Sidebar Device Pill Button (Dual Counts: Direct Cloud vs Mesh)
-                    Button {
-                        isShowingDevicesModal = true
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("FIELD NODES REGISTRY")
-                                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            HStack(spacing: 8) {
-                                HStack(spacing: 3) {
-                                    Circle().fill(Color.green).frame(width: 6, height: 6)
-                                    Text("🌐 \(store.directCloudDevicesCount) Cloud")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.green)
+                        Button {
+                            isShowingDevicesModal = true
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text("FIELD NODES REGISTRY")
+                                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 7, weight: .bold))
+                                        .foregroundColor(.secondary)
                                 }
                                 
-                                Text("•").foregroundColor(.secondary).font(.system(size: 9))
-                                
-                                HStack(spacing: 3) {
-                                    Circle().fill(Color.cyan).frame(width: 6, height: 6)
-                                    Text("📡 \(store.meshRelayDevicesCount) Mesh")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.cyan)
+                                HStack(spacing: 6) {
+                                    HStack(spacing: 3) {
+                                        Circle().fill(Color.green).frame(width: 5, height: 5)
+                                        Text("\(store.directCloudDevicesCount) Cloud")
+                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.green)
+                                    }
+                                    
+                                    Text("•").foregroundColor(.secondary).font(.system(size: 8))
+                                    
+                                    HStack(spacing: 3) {
+                                        Circle().fill(Color.cyan).frame(width: 5, height: 5)
+                                        Text("\(store.meshRelayDevicesCount) Mesh")
+                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.cyan)
+                                    }
                                 }
                             }
+                            .padding(8)
+                            .background(Color.white.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color.black.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(store.activeDevices.isEmpty ? Color.white.opacity(0.1) : Color.green.opacity(0.35), lineWidth: 1)
-                        )
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .help("Click to inspect all connected mobile nodes and gateways")
+                    .padding(10)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
             }
+            .frame(minWidth: 200, maxWidth: 220)
+            .background(Color(NSColor.windowBackgroundColor))
         } detail: {
             Group {
                 switch selectedTab {
