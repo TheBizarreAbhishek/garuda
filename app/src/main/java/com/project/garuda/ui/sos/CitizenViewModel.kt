@@ -86,12 +86,27 @@ class CitizenViewModel(
     private fun initBleMeshEngine() {
         if (appContext != null) {
             try {
+                // 1. Start Persistent Background Foreground Service so Mesh is never killed by OS
+                try {
+                    val serviceIntent = Intent(appContext, MeshForegroundService::class.java).apply {
+                        action = MeshForegroundService.ACTION_START_HIGH_ALERT
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        appContext.startForegroundService(serviceIntent)
+                    } else {
+                        appContext.startService(serviceIntent)
+                    }
+                } catch (e: Exception) {
+                    Log.v(TAG, "Foreground service start note: ${e.message}")
+                }
+
                 advertiserManager = BleAdvertiserManager(appContext)
                 scannerManager = BleScannerManager(appContext)
                 meshRelayEngine = MeshRelayEngine(advertiserManager, scannerManager, viewModelScope, localDeviceHash = localDeviceHash)
 
                 startMeshScanner()
                 startHeartbeatBroadcaster()
+                observeMeshTelemetry()
 
                 // Listen to live incoming mesh packets over Bluetooth
                 viewModelScope.launch {
@@ -109,21 +124,6 @@ class CitizenViewModel(
                             )
                         }
 
-                        // 🌐 EDGE GATEWAY RELAY TO CLOUD: If this phone has Internet, relay ONLY offline mesh peers (who do not have direct cloud)
-                        val isPeerDirectOnline = (packet.emergencyType == 0x7F.toByte())
-                        if (firebaseGateway.syncState.value.isConnected && 
-                            packet.deviceHash != 0 && 
-                            packet.deviceHash != localDeviceHash && 
-                            !isPeerDirectOnline) {
-                            viewModelScope.launch {
-                                firebaseGateway.uploadMeshPeerToFirestore(
-                                    peerHash = packet.deviceHash,
-                                    latitude = packet.latitude,
-                                    longitude = packet.longitude,
-                                    hopCount = packet.hopCount.coerceAtLeast(1)
-                                )
-                            }
-                        }
 
                         // 🚨 Emergency Declaration Relayed via BLE Mesh from other peer nodes
                         if (packet.packetType == GarudaPacket.TYPE_EMERGENCY_BROADCAST || 
@@ -243,7 +243,7 @@ class CitizenViewModel(
     private fun observeMeshTelemetry() {
         viewModelScope.launch {
             while (isActive) {
-                delay(2000)
+                delay(1000) // Fast 1-second auto refresh for responsive UI peer count
                 val activePeers = meshRelayEngine?.getActivePeerCount() ?: 0
                 _uiState.update { current ->
                     current.copy(

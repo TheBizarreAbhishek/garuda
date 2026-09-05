@@ -79,8 +79,12 @@ class MeshForegroundService : Service() {
     }
 
     private fun startMeshService(mode: DutyCycleMode) {
-        val notification = createNotification("Garuda Disaster Mesh Active")
-        startForeground(NOTIFICATION_ID, notification)
+        val notification = createNotification("Background BLE Mesh Relay & Offline Emergency Monitoring Active")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         setDutyCycleMode(mode)
     }
@@ -144,11 +148,12 @@ class MeshForegroundService : Service() {
 
     private fun createNotification(contentText: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Garuda Mesh Active")
+            .setContentTitle("🛡️ Garuda Disaster Mesh Active")
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
 }

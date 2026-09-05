@@ -124,8 +124,22 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                     }
                 }
                 
+                // Filter out any mesh relay duplicates that match an active direct cloud device
+                let directDevices = devices.filter { $0.isDirectCloud }
+                var cleanDevices: [ConnectedDevice] = directDevices
+                for dev in devices where !dev.isDirectCloud {
+                    let hasMatchingDirectDevice = directDevices.contains { direct in
+                        abs(direct.latitude - dev.latitude) < 0.0001 && abs(direct.longitude - dev.longitude) < 0.0001
+                    }
+                    if hasMatchingDirectDevice {
+                        self.purgeDeadDeviceFromCloud(deviceId: dev.id)
+                    } else {
+                        cleanDevices.append(dev)
+                    }
+                }
+                
                 DispatchQueue.main.async {
-                    completion(devices)
+                    completion(cleanDevices)
                 }
             }
         }.resume()
