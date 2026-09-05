@@ -28,6 +28,7 @@ class MeshRelayEngine(
 ) {
 
     companion object {
+        private const val TAG = "MeshRelayEngine"
         const val LRU_CACHE_CAPACITY = 500
         const val JITTER_MIN_MS = 100L
         const val JITTER_MAX_MS = 600L
@@ -71,6 +72,9 @@ class MeshRelayEngine(
         // Record active peer device hash timestamp (strictly ignore self-originating packets)
         if (packet.deviceHash != 0 && (localDeviceHash == 0 || packet.deviceHash != localDeviceHash)) {
             activePeersMap[packet.deviceHash] = System.currentTimeMillis()
+            try {
+                android.util.Log.d(TAG, "Recorded active peer hash: ${packet.deviceHash} (type=${packet.packetType}, localDeviceHash=$localDeviceHash), totalActivePeers=${activePeersMap.size}, activeHashes=${activePeersMap.keys}")
+            } catch (_: Throwable) {}
         }
 
         // 1. Deduplication check using LRU Cache

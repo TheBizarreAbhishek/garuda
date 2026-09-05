@@ -46,7 +46,13 @@ class CitizenViewModel(
     val firebaseGateway = FirebaseCloudGateway(viewModelScope, appContext)
     val uplinkGateway = UplinkGatewayManager(viewModelScope, appContext)
 
+    private var localDeviceHash: Int = 0
+
     init {
+        localDeviceHash = appContext?.let { ctx ->
+            android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID)?.hashCode()
+        } ?: (Build.MODEL ?: "GarudaNode").hashCode()
+
         initBleMeshEngine()
         observeFirebaseGovernmentAlerts()
         observeUplinkGatewayEvents()
@@ -82,9 +88,7 @@ class CitizenViewModel(
             try {
                 advertiserManager = BleAdvertiserManager(appContext)
                 scannerManager = BleScannerManager(appContext)
-                val androidId = android.provider.Settings.Secure.getString(appContext.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: (Build.MODEL ?: "GarudaNode")
-                val myHash = androidId.hashCode()
-                meshRelayEngine = MeshRelayEngine(advertiserManager, scannerManager, viewModelScope, localDeviceHash = myHash)
+                meshRelayEngine = MeshRelayEngine(advertiserManager, scannerManager, viewModelScope, localDeviceHash = localDeviceHash)
 
                 startMeshScanner()
                 startHeartbeatBroadcaster()
@@ -151,7 +155,7 @@ class CitizenViewModel(
                     val meshAlertPacket = GarudaPacket(
                         packetType = GarudaPacket.TYPE_EMERGENCY_BROADCAST,
                         packetId = (syncState.alertHeadline.hashCode() xor syncState.alertDistrict.hashCode()),
-                        deviceHash = firebaseGateway.deviceId.hashCode(),
+                        deviceHash = localDeviceHash,
                         timestamp = (System.currentTimeMillis() / 1000).toInt(),
                         latitude = firebaseGateway.hardwareManager?.locationFlow?.value?.latitude ?: 0.0,
                         longitude = firebaseGateway.hardwareManager?.locationFlow?.value?.longitude ?: 0.0,
@@ -281,15 +285,10 @@ class CitizenViewModel(
         heartbeatJob = viewModelScope.launch {
             while (isActive) {
                 val nowEpoch = (System.currentTimeMillis() / 1000).toInt()
-                val androidId = appContext?.let { ctx ->
-                    android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
-                } ?: (Build.MODEL ?: "GarudaCitizen")
-                val deviceHashInt = androidId.hashCode()
-
                 val heartbeatPacket = GarudaPacket(
                     packetType = GarudaPacket.TYPE_HEARTBEAT,
                     packetId = Random.nextInt(10000, 99999),
-                    deviceHash = deviceHashInt,
+                    deviceHash = localDeviceHash,
                     timestamp = nowEpoch,
                     latitude = 0.0,
                     longitude = 0.0,
@@ -299,7 +298,7 @@ class CitizenViewModel(
                 )
                 try {
                     meshRelayEngine?.broadcastPacket(heartbeatPacket)
-                    Log.d(TAG, "Sent presence heartbeat beacon from $androidId (hash=$deviceHashInt)")
+                    Log.d(TAG, "Sent presence heartbeat beacon (hash=$localDeviceHash)")
                 } catch (e: Exception) {
                     Log.v(TAG, "Heartbeat broadcast failed", e)
                 }
@@ -382,7 +381,6 @@ class CitizenViewModel(
             EmergencyType.GENERAL -> GarudaPacket.EMERGENCY_MEDICAL
         }
 
-        val deviceHashInt = (Build.MODEL ?: "GarudaCitizen").hashCode()
         val loc = firebaseGateway.hardwareManager?.locationFlow?.value
         val realLat = if (loc != null && loc.hasValidLocation && loc.latitude != 0.0) loc.latitude else 12.9716
         val realLon = if (loc != null && loc.hasValidLocation && loc.longitude != 0.0) loc.longitude else 77.5946
@@ -390,7 +388,7 @@ class CitizenViewModel(
         val garudaPacket = GarudaPacket(
             packetType = GarudaPacket.TYPE_SOS,
             packetId = packetIdInt,
-            deviceHash = deviceHashInt,
+            deviceHash = localDeviceHash,
             timestamp = nowEpoch,
             latitude = realLat,
             longitude = realLon,
