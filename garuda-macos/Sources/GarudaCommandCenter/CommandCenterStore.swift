@@ -10,8 +10,8 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var activeDevices: [ConnectedDevice] = []
     @Published public var notifications: [PushNotificationRecord] = []
     @Published public var selectedSignal: SosSignal?
-    @Published public var isEmergencyBroadcastActive: Bool = true
-    @Published public var activeDistrict: String = "Wayanad / Kerala Region"
+    @Published public var isEmergencyBroadcastActive: Bool = false
+    @Published public var activeDistrict: String = "All Regions (Standby)"
     @Published public var isSimulatingMeshArrivals: Bool = false
     @Published public var connectedClientsCount: Int = 0
     @Published public var serverPort: UInt16 = 8080
@@ -347,16 +347,7 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
             )
         ]
         
-        alerts = [
-            DisasterAlert(
-                title: "Flash Flood & Landslide Red Alert",
-                severity: "SEVERE EMERGENCY",
-                targetDistrict: "Wayanad / Calicut District",
-                instructions: "NDMA Directive: Immediate evacuation of low-lying flood zones. Offline BLE Mesh Activated on all citizen devices.",
-                timestamp: Date().addingTimeInterval(-3600),
-                isEmergencyActive: true
-            )
-        ]
+        alerts = []
         
         hazards = [
             HazardReport(
