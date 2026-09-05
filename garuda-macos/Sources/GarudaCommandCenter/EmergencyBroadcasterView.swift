@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Selected Geo Region Model
 public struct SelectedGeoRegion: Identifiable, Hashable, Sendable {
-    public var id: String { "\(district), \(state)" }
+    public var id: String { "\(district)-\(state)" }
     public let state: String
     public let district: String
     
@@ -12,10 +12,10 @@ public struct SelectedGeoRegion: Identifiable, Hashable, Sendable {
     }
     
     public var displayName: String {
-        if state == "National / Pan-India" || state.isEmpty {
+        if state == "National / Pan-India" || state.isEmpty || district.contains(state) {
             return district
         }
-        return "\(district), \(state)"
+        return "\(district) (\(state))"
     }
 }
 

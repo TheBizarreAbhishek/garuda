@@ -93,27 +93,27 @@ data class CitizenUiState(
 
 fun defaultChecklist(): List<ChecklistItem> = listOf(
     // Go-Bag
-    ChecklistItem("gb-1", "3L Bottled Drinking Water per person", "Survival minimum for 72 hours", ChecklistCategory.GO_BAG, true),
-    ChecklistItem("gb-2", "Non-perishable energy rations / dry fruits", "High calorie, requires no cooking", ChecklistCategory.GO_BAG, true),
+    ChecklistItem("gb-1", "3L Bottled Drinking Water per person", "Survival minimum for 72 hours", ChecklistCategory.GO_BAG, false),
+    ChecklistItem("gb-2", "Non-perishable energy rations / dry fruits", "High calorie, requires no cooking", ChecklistCategory.GO_BAG, false),
     ChecklistItem("gb-3", "High-power LED flashlight + spare batteries", "Waterproof flashlight or hand-crank", ChecklistCategory.GO_BAG, false),
-    ChecklistItem("gb-4", "Charged power bank (20,000 mAh)", "Keeps Garuda BLE relay alive", ChecklistCategory.GO_BAG, true),
+    ChecklistItem("gb-4", "Charged power bank (20,000 mAh)", "Keeps Garuda BLE relay alive", ChecklistCategory.GO_BAG, false),
     ChecklistItem("gb-5", "Emergency whistle (high decibel)", "Audible to search dogs and rescue crews", ChecklistCategory.GO_BAG, false),
     ChecklistItem("gb-6", "Waterproof pouch for Aadhaar/ID & Cash", "Paper documents ruin easily in flood", ChecklistCategory.GO_BAG, false),
 
     // First Aid
-    ChecklistItem("fa-1", "Sterile gauze bandages & adhesive tape", "Bleeding control", ChecklistCategory.FIRST_AID, true),
+    ChecklistItem("fa-1", "Sterile gauze bandages & adhesive tape", "Bleeding control", ChecklistCategory.FIRST_AID, false),
     ChecklistItem("fa-2", "Antiseptic solution (Betadine/Dettol)", "Wound cleansing", ChecklistCategory.FIRST_AID, false),
     ChecklistItem("fa-3", "Tourniquet & trauma shears", "Critical limb hemorrhage control", ChecklistCategory.FIRST_AID, false),
-    ChecklistItem("fa-4", "Personal prescribed medicines (7 days)", "Pack extra in ziplock bag", ChecklistCategory.FIRST_AID, true),
+    ChecklistItem("fa-4", "Personal prescribed medicines (7 days)", "Pack extra in ziplock bag", ChecklistCategory.FIRST_AID, false),
 
     // Earthquake
-    ChecklistItem("eq-1", "DROP, COVER, and HOLD ON protocol practiced", "Under sturdy desk or table", ChecklistCategory.EARTHQUAKE, true),
+    ChecklistItem("eq-1", "DROP, COVER, and HOLD ON protocol practiced", "Under sturdy desk or table", ChecklistCategory.EARTHQUAKE, false),
     ChecklistItem("eq-2", "Main gas valve and electrical mains located", "Know how to shut off instantly", ChecklistCategory.EARTHQUAKE, false),
-    ChecklistItem("eq-3", "Safe outdoor open area identified", "Away from glass facades and utility poles", ChecklistCategory.EARTHQUAKE, true),
+    ChecklistItem("eq-3", "Safe outdoor open area identified", "Away from glass facades and utility poles", ChecklistCategory.EARTHQUAKE, false),
 
     // Flood
     ChecklistItem("fl-1", "Rooftop access verified and unobstructed", "Prepare ladder or hatch key", ChecklistCategory.FLOOD, false),
-    ChecklistItem("fl-2", "Electrical appliances disconnected from floor sockets", "Prevent electrocution hazard", ChecklistCategory.FLOOD, true),
+    ChecklistItem("fl-2", "Electrical appliances disconnected from floor sockets", "Prevent electrocution hazard", ChecklistCategory.FLOOD, false),
     ChecklistItem("fl-3", "Life jackets / flotation rings checked", "Secure inflatable vests if available", ChecklistCategory.FLOOD, false),
 
     // Cyclone

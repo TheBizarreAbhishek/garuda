@@ -97,6 +97,46 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                     }
                 }
             }
+        } onEmergencyAlertReceived: { [weak self] cloudAlert in
+            guard let self = self else { return }
+            withAnimation(.easeInOut) {
+                if let alert = cloudAlert, alert.isEmergencyActive {
+                    // Split multiple target districts if semicolon-separated
+                    let districtNames = alert.targetDistrict.contains(";")
+                        ? alert.targetDistrict.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                        : [alert.targetDistrict.trimmingCharacters(in: .whitespacesAndNewlines)]
+                    
+                    var updatedAlerts: [DisasterAlert] = []
+                    if districtNames.count > 1 {
+                        for dName in districtNames {
+                            updatedAlerts.append(
+                                DisasterAlert(
+                                    id: "ALERT-\(dName)",
+                                    title: alert.title,
+                                    severity: alert.severity,
+                                    targetDistrict: dName,
+                                    instructions: alert.instructions,
+                                    timestamp: alert.timestamp,
+                                    isEmergencyActive: true
+                                )
+                            )
+                        }
+                    } else {
+                        updatedAlerts.append(alert)
+                    }
+                    
+                    self.alerts = updatedAlerts
+                    self.isEmergencyBroadcastActive = true
+                    self.activeDistrict = alert.targetDistrict
+                } else if cloudAlert == nil {
+                    // Cloud confirms standby mode
+                    if self.isEmergencyBroadcastActive {
+                        self.isEmergencyBroadcastActive = false
+                        self.activeDistrict = "All Regions (Standby)"
+                        self.alerts.removeAll()
+                    }
+                }
+            }
         }
     }
     
@@ -231,14 +271,22 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
             } else {
                 alerts.insert(newAlert, at: 0)
             }
-            
-            // Sync to Firebase Firestore
-            FirebaseFirestoreClient.shared.publishEmergencyActivation(alert: newAlert)
         }
+        
+        let combinedDistrict = districts.joined(separator: "; ")
+        let primaryAlert = DisasterAlert(
+            title: title,
+            severity: severity,
+            targetDistrict: combinedDistrict,
+            instructions: instructions,
+            isEmergencyActive: true
+        )
+        // Sync combined targetDistrict to Firebase Firestore
+        FirebaseFirestoreClient.shared.publishEmergencyActivation(alert: primaryAlert)
         
         isEmergencyBroadcastActive = true
         let activeList = alerts.filter { $0.isEmergencyActive }.map { $0.targetDistrict }
-        activeDistrict = activeList.joined(separator: ", ")
+        activeDistrict = activeList.joined(separator: "; ")
         
         // Broadcast over SSE to connected phones
         CommandGridServer.shared.broadcastSseEvent(

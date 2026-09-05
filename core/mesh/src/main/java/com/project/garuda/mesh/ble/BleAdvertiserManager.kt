@@ -11,13 +11,14 @@ import android.util.Log
 
 /**
  * Manages BLE Advertising for Project Garuda mesh broadcast network.
- * Configured with ADVERTISE_MODE_LOW_LATENCY and ADVERTISE_TX_POWER_HIGH.
+ * Compatible with all Android vendor chipsets.
  */
 class BleAdvertiserManager(private val context: Context) {
 
     companion object {
         private const val TAG = "BleAdvertiserManager"
         const val MANUFACTURER_ID = 0x4744 // "GD" for Garuda
+        const val MAX_ADVERTISE_BYTES = 24
     }
 
     private var isAdvertising = false
@@ -26,17 +27,13 @@ class BleAdvertiserManager(private val context: Context) {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             super.onStartSuccess(settingsInEffect)
             isAdvertising = true
-            Log.d(TAG, "BLE Mesh Advertising started successfully")
+            Log.d(TAG, "BLE Mesh Advertising active")
         }
 
         override fun onStartFailure(errorCode: Int) {
             super.onStartFailure(errorCode)
             isAdvertising = false
-            Log.w(TAG, "BLE Mesh Advertising failed with code: $errorCode")
-            if (errorCode == ADVERTISE_FAILED_ALREADY_STARTED) {
-                // If already started, force stop
-                stopAdvertising()
-            }
+            Log.w(TAG, "BLE Mesh Advertising failed: $errorCode")
         }
     }
 
@@ -55,23 +52,33 @@ class BleAdvertiserManager(private val context: Context) {
             return
         }
 
-        // Always force stop previous before starting new advertisement
-        stopAdvertising()
+        try {
+            advertiser.stopAdvertising(advertiseCallback)
+        } catch (_: Exception) {}
 
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .setConnectable(false)
+            .setTimeout(0)
             .build()
+
+        // Ensure payload fits within standard 31-byte advertising frame limit
+        val safeBytes = if (packetBytes.size > MAX_ADVERTISE_BYTES) {
+            packetBytes.copyOf(MAX_ADVERTISE_BYTES)
+        } else {
+            packetBytes
+        }
 
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
-            .addManufacturerData(MANUFACTURER_ID, packetBytes)
+            .addManufacturerData(MANUFACTURER_ID, safeBytes)
             .build()
 
         try {
             advertiser.startAdvertising(settings, data, advertiseCallback)
+            Log.d(TAG, "Broadcasting BLE Mesh Packet (${safeBytes.size} bytes)")
         } catch (e: SecurityException) {
             Log.e(TAG, "Missing Bluetooth permissions to start advertising", e)
         } catch (e: Exception) {
@@ -85,12 +92,7 @@ class BleAdvertiserManager(private val context: Context) {
     fun stopAdvertising() {
         try {
             getAdvertiser()?.stopAdvertising(advertiseCallback)
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Missing Bluetooth permissions to stop advertising", e)
-        } catch (e: Exception) {
-            Log.v(TAG, "Error stopping BLE advertising", e)
-        } finally {
-            isAdvertising = false
-        }
+        } catch (_: Exception) {}
+        isAdvertising = false
     }
 }

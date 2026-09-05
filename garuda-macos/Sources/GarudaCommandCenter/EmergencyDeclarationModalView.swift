@@ -18,10 +18,10 @@ public struct EmergencyDeclarationModalView: View {
     }
     
     private var targetedGeofenceString: String {
-        if selectedState == "National / Pan-India" {
+        if selectedState == "National / Pan-India" || selectedDistrict.contains(selectedState) {
             return selectedDistrict
         } else {
-            return "\(selectedDistrict), \(selectedState)"
+            return "\(selectedDistrict) (\(selectedState))"
         }
     }
     

@@ -37,7 +37,8 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         onSosReceived: @escaping @MainActor ([SosSignal]) -> Void,
         onHazardsReceived: @escaping @MainActor ([HazardReport]) -> Void,
         onDevicesReceived: @escaping @MainActor ([ConnectedDevice]) -> Void,
-        onSheltersReceived: @escaping @MainActor ([ReliefShelter]) -> Void = { _ in }
+        onSheltersReceived: @escaping @MainActor ([ReliefShelter]) -> Void = { _ in },
+        onEmergencyAlertReceived: @escaping @MainActor (DisasterAlert?) -> Void = { _ in }
     ) {
         pollTimer?.cancel()
         
@@ -46,6 +47,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         fetchHazards(completion: onHazardsReceived)
         fetchConnectedDevices(completion: onDevicesReceived)
         fetchReliefShelters(completion: onSheltersReceived)
+        fetchActiveEmergencyAlert(completion: onEmergencyAlertReceived)
         
         // Live poll every 3 seconds for new cloud documents
         pollTimer = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -55,12 +57,62 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                 self?.fetchHazards(completion: onHazardsReceived)
                 self?.fetchConnectedDevices(completion: onDevicesReceived)
                 self?.fetchReliefShelters(completion: onSheltersReceived)
+                self?.fetchActiveEmergencyAlert(completion: onEmergencyAlertReceived)
             }
     }
     
     public func stopListener() {
         pollTimer?.cancel()
         pollTimer = nil
+    }
+    
+    // MARK: - Fetch Active Emergency Alert Status from Firestore
+    public func fetchActiveEmergencyAlert(completion: @escaping @MainActor (DisasterAlert?) -> Void) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/alerts/current_status?key=\(apiKey)") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 4.0
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data, error == nil else { return }
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let fields = json["fields"] as? [String: Any] {
+                
+                let isEmergency = (fields["isEmergencyActive"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                let title = (fields["title"] as? [String: Any])?["stringValue"] as? String ?? "Government Emergency Alert"
+                let severity = (fields["severity"] as? [String: Any])?["stringValue"] as? String ?? "Level 3 - Critical / Red Alert"
+                let district = (fields["targetDistrict"] as? [String: Any])?["stringValue"] as? String ?? "All Regions"
+                let instructions = (fields["instructions"] as? [String: Any])?["stringValue"] as? String ?? "Follow safety instructions."
+                let timestampEpoch = Double((fields["timestamp"] as? [String: Any])?["integerValue"] as? String ?? "")
+                    ?? Double((fields["timestamp"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0)
+                let timestamp = timestampEpoch > 0 ? Date(timeIntervalSince1970: timestampEpoch) : Date()
+                
+                if isEmergency {
+                    let alert = DisasterAlert(
+                        id: "current_status",
+                        title: title,
+                        severity: severity,
+                        targetDistrict: district,
+                        instructions: instructions,
+                        timestamp: timestamp,
+                        isEmergencyActive: true
+                    )
+                    Task { @MainActor in
+                        completion(alert)
+                    }
+                } else {
+                    Task { @MainActor in
+                        completion(nil)
+                    }
+                }
+            } else {
+                Task { @MainActor in
+                    completion(nil)
+                }
+            }
+        }.resume()
     }
     
     // MARK: - Fetch Connected Active Devices

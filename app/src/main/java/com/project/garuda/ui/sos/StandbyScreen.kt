@@ -447,24 +447,34 @@ fun MedicalProfileCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            profile.emergencyContacts.forEach { contact ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "${contact.name} (${contact.relation})",
-                        color = Color.White,
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        text = contact.phone,
-                        color = TextSecondaryDark,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+            if (profile.emergencyContacts.isEmpty()) {
+                Text(
+                    text = "No emergency contacts set. Tap 'Edit' above to add next-of-kin contacts for auto-SMS distress dispatch.",
+                    color = TextSecondaryDark,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            } else {
+                profile.emergencyContacts.forEach { contact ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "${contact.name} (${contact.relation})",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = contact.phone,
+                            color = SafeGreen,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -481,7 +491,7 @@ fun ProfileField(label: String, value: String, modifier: Modifier = Modifier) {
             color = TextTertiaryDark
         )
         Text(
-            text = value,
+            text = value.ifBlank { "--" },
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color.White
@@ -518,6 +528,9 @@ fun EditProfileDialog(
     var bloodGroup by remember { mutableStateOf(currentProfile.bloodGroup) }
     var allergies by remember { mutableStateOf(currentProfile.allergies) }
     var conditions by remember { mutableStateOf(currentProfile.chronicConditions) }
+    var contactName by remember { mutableStateOf(currentProfile.emergencyContacts.firstOrNull()?.name ?: "") }
+    var contactRelation by remember { mutableStateOf(currentProfile.emergencyContacts.firstOrNull()?.relation ?: "Family") }
+    var contactPhone by remember { mutableStateOf(currentProfile.emergencyContacts.firstOrNull()?.phone ?: "") }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -533,7 +546,7 @@ fun EditProfileDialog(
                     .padding(20.dp)
             ) {
                 Text(
-                    text = "Edit Medical Profile",
+                    text = "Edit Medical & Emergency Profile",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -544,7 +557,7 @@ fun EditProfileDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Full Name") },
+                    label = { Text("Citizen Full Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -564,7 +577,7 @@ fun EditProfileDialog(
                 OutlinedTextField(
                     value = allergies,
                     onValueChange = { allergies = it },
-                    label = { Text("Allergies") },
+                    label = { Text("Allergies (Penicillin, Dust, None)") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -573,7 +586,47 @@ fun EditProfileDialog(
                 OutlinedTextField(
                     value = conditions,
                     onValueChange = { conditions = it },
-                    label = { Text("Chronic Conditions / Inhaler / Insulin") },
+                    label = { Text("Chronic Conditions (Asthma, Diabetes)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = BorderSubtle)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Emergency Contact (Next-of-Kin)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SafeGreen
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = contactName,
+                        onValueChange = { contactName = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = contactRelation,
+                        onValueChange = { contactRelation = it },
+                        label = { Text("Relation") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = contactPhone,
+                    onValueChange = { contactPhone = it },
+                    label = { Text("Emergency Phone Number") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -589,12 +642,24 @@ fun EditProfileDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
+                            val contacts = if (contactPhone.isNotBlank()) {
+                                listOf(
+                                    EmergencyContact(
+                                        id = "ec-1",
+                                        name = contactName.ifBlank { "Emergency Contact" },
+                                        relation = contactRelation.ifBlank { "Family" },
+                                        phone = contactPhone.trim()
+                                    )
+                                )
+                            } else emptyList()
+
                             onSave(
                                 currentProfile.copy(
-                                    fullName = name,
-                                    bloodGroup = bloodGroup,
+                                    fullName = name.ifBlank { "Citizen Node" },
+                                    bloodGroup = bloodGroup.ifBlank { "O+" },
                                     allergies = allergies,
-                                    chronicConditions = conditions
+                                    chronicConditions = conditions,
+                                    emergencyContacts = contacts
                                 )
                             )
                         },

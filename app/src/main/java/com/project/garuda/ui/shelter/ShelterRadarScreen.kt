@@ -51,60 +51,26 @@ import com.project.garuda.ui.theme.SafeGreen
 data class ReliefShelter(
     val id: String,
     val name: String,
-    val distanceMeters: Int,
-    val bearingDegrees: Float,
-    val capacityCurrent: Int,
-    val capacityMax: Int,
-    val hasMedical: Boolean,
-    val hasWater: Boolean,
-    val hasPower: Boolean,
-    val statusText: String
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val distanceMeters: Int = 0,
+    val bearingDegrees: Float = 0f,
+    val capacityCurrent: Int = 0,
+    val capacityMax: Int = 100,
+    val hasMedical: Boolean = true,
+    val hasWater: Boolean = true,
+    val hasPower: Boolean = true,
+    val statusText: String = "Open",
+    val phone: String = "112"
 )
 
 @Composable
 fun ShelterRadarScreen(
-    onNavigateToShelter: (ReliefShelter) -> Unit = {}
+    shelters: List<ReliefShelter> = emptyList(),
+    onNavigateToShelter: (ReliefShelter) -> Unit = {},
+    onCallShelter: (ReliefShelter) -> Unit = {}
 ) {
-    val shelters = listOf(
-        ReliefShelter(
-            id = "1",
-            name = "Community Hall Relief Camp Sector 4",
-            distanceMeters = 650,
-            bearingDegrees = 42f,
-            capacityCurrent = 142,
-            capacityMax = 300,
-            hasMedical = true,
-            hasWater = true,
-            hasPower = true,
-            statusText = "Open • 158 Spots Available"
-        ),
-        ReliefShelter(
-            id = "2",
-            name = "Government High School Multi-Purpose Hall",
-            distanceMeters = 1200,
-            bearingDegrees = 115f,
-            capacityCurrent = 390,
-            capacityMax = 450,
-            hasMedical = true,
-            hasWater = true,
-            hasPower = false,
-            statusText = "Open • Near Capacity"
-        ),
-        ReliefShelter(
-            id = "3",
-            name = "District Indoor Stadium Evacuation Hub",
-            distanceMeters = 2400,
-            bearingDegrees = 270f,
-            capacityCurrent = 520,
-            capacityMax = 1200,
-            hasMedical = true,
-            hasWater = true,
-            hasPower = true,
-            statusText = "Open • Helipad & Trauma Center"
-        )
-    )
-
-    val closest = shelters.first()
+    val closest = shelters.firstOrNull()
 
     Column(
         modifier = Modifier
@@ -119,7 +85,7 @@ fun ShelterRadarScreen(
             color = Color.White
         )
         Text(
-            text = "GPS Compass Bearing • Cached Offline Map Data",
+            text = "Real GPS Compass Bearing • Live District Tracker (50km)",
             fontSize = 12.sp,
             color = SafeGreen,
             fontWeight = FontWeight.SemiBold
@@ -127,34 +93,109 @@ fun ShelterRadarScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Big Radar Compass Card for Nearest Shelter
-        RadarCompassCard(shelter = closest)
+        if (closest == null) {
+            // Clean Empty State when no shelters are in the 50km radius
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF121814)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SafeGreen.copy(alpha = 0.3f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(SafeGreen.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = SafeGreen,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-        Text(
-            text = "Available Relief Shelters Nearby",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFDDDDDD)
-        )
+                        Text(
+                            text = "No Relief Camps in Immediate Sector",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
 
-        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 8.dp)
-        ) {
-            items(shelters, key = { it.id }) { shelter ->
-                ShelterItemCard(shelter = shelter)
+                        Text(
+                            text = "Only relief shelters within your 50km district perimeter appear on this radar. When the Command Center or NDRF deploys a camp nearby, it will sync automatically over Mesh / Cloud.",
+                            color = Color.Gray,
+                            fontSize = 12.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { onCallShelter(ReliefShelter(id = "help", name = "Helpline", phone = "1078")) },
+                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = SafeGreen),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Call National Disaster Helpline (1078)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        } else {
+            // Big Radar Compass Card for Nearest Shelter
+            RadarCompassCard(shelter = closest, onNavigate = { onNavigateToShelter(closest) })
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Available Relief Shelters Nearby (${shelters.size})",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFDDDDDD)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                items(shelters, key = { it.id }) { shelter ->
+                    ShelterItemCard(
+                        shelter = shelter,
+                        onNavigate = { onNavigateToShelter(shelter) },
+                        onCall = { onCallShelter(shelter) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RadarCompassCard(shelter: ReliefShelter) {
+private fun RadarCompassCard(
+    shelter: ReliefShelter,
+    onNavigate: () -> Unit = {}
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.2f,
@@ -172,76 +213,97 @@ private fun RadarCompassCard(shelter: ReliefShelter) {
         colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1E14)),
         border = androidx.compose.foundation.BorderStroke(1.dp, SafeGreen.copy(alpha = 0.4f))
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Animated Radar Compass Dial
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .background(SafeGreen.copy(alpha = pulseAlpha), CircleShape)
-                    .border(2.dp, SafeGreen, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Navigation,
-                    contentDescription = "Bearing",
-                    tint = SafeGreen,
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Animated Radar Compass Dial
+                Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .rotate(shelter.bearingDegrees)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
+                        .size(72.dp)
+                        .background(SafeGreen.copy(alpha = pulseAlpha), CircleShape)
+                        .border(2.dp, SafeGreen, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Navigation,
+                        contentDescription = "Bearing",
+                        tint = SafeGreen,
                         modifier = Modifier
-                            .background(SafeGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "NEAREST SHELTER",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SafeGreen
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${shelter.distanceMeters}m away",
-                        fontSize = 12.sp,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
+                            .size(36.dp)
+                            .rotate(shelter.bearingDegrees)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.width(16.dp))
 
-                Text(
-                    text = shelter.name,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .background(SafeGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "NEAREST SHELTER",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SafeGreen
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (shelter.distanceMeters >= 1000) "${String.format("%.1f", shelter.distanceMeters / 1000.0)}km away" else "${shelter.distanceMeters}m away",
+                            fontSize = 12.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-                Text(
-                    text = "Heading: 42° North-East • ~8 min walk",
-                    fontSize = 11.sp,
-                    color = Color(0xFFB0BEC5)
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = shelter.name,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1
+                    )
+
+                    Text(
+                        text = "Heading: ${shelter.bearingDegrees.toInt()}° Compass • ~${(shelter.distanceMeters / 80).coerceAtLeast(1)} min walk",
+                        fontSize = 11.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            androidx.compose.material3.Button(
+                onClick = onNavigate,
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = SafeGreen),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.NearMe,
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(16.dp)
                 )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Start Walking GPS Navigation", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }
 }
 
 @Composable
-private fun ShelterItemCard(shelter: ReliefShelter) {
-    val occupancyFraction = shelter.capacityCurrent.toFloat() / shelter.capacityMax.toFloat()
+private fun ShelterItemCard(
+    shelter: ReliefShelter,
+    onNavigate: () -> Unit = {},
+    onCall: () -> Unit = {}
+) {
+    val occupancyFraction = (shelter.capacityCurrent.toFloat() / shelter.capacityMax.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -264,7 +326,7 @@ private fun ShelterItemCard(shelter: ReliefShelter) {
                 )
 
                 Text(
-                    text = if (shelter.distanceMeters >= 1000) "${shelter.distanceMeters / 1000.0}km" else "${shelter.distanceMeters}m",
+                    text = if (shelter.distanceMeters >= 1000) "${String.format("%.1f", shelter.distanceMeters / 1000.0)}km" else "${shelter.distanceMeters}m",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = SafeGreen
@@ -319,6 +381,32 @@ private fun ShelterItemCard(shelter: ReliefShelter) {
                 color = if (occupancyFraction > 0.85f) Color(0xFFE53935) else SafeGreen,
                 trackColor = Color(0xFF222222)
             )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onCall,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    Text("📞 Call Helpline", fontSize = 11.sp, color = SafeGreen)
+                }
+
+                androidx.compose.material3.Button(
+                    onClick = onNavigate,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = SafeGreen),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    Text("🗺️ Navigate", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

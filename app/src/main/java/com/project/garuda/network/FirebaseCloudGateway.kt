@@ -158,7 +158,14 @@ class FirebaseCloudGateway(
                     val isEmergency = fields.optJSONObject("isEmergencyActive")?.optBoolean("booleanValue") ?: false
                     val alertTimestamp = fields.optJSONObject("timestamp")?.optString("integerValue")?.toLongOrNull() ?: 0L
 
-                    val isNewEmergencyAlert = isEmergency && (alertTimestamp > lastNotifiedAlertTimestamp)
+                    val persistence = context?.let { com.project.garuda.data.CitizenPersistenceManager(it) }
+                    val lastSavedTimestamp = persistence?.getLastAlertNotifiedTimestamp() ?: 0L
+                    val lastSavedActive = persistence?.getLastAlertActiveState() ?: false
+
+                    val isNewEmergencyAlert = isEmergency && (
+                        (alertTimestamp > lastSavedTimestamp && alertTimestamp > 0L) ||
+                        (!lastSavedActive && isEmergency)
+                    )
 
                     _syncState.value = _syncState.value.copy(
                         isConnected = true,
@@ -170,7 +177,8 @@ class FirebaseCloudGateway(
                     )
 
                     if (isNewEmergencyAlert) {
-                        lastNotifiedAlertTimestamp = alertTimestamp
+                        persistence?.setLastAlertNotifiedTimestamp(alertTimestamp)
+                        persistence?.setLastAlertActiveState(true)
                         if (context != null) {
                             com.project.garuda.notification.GarudaNotificationManager.showHeadsUpNotification(
                                 context = context,
@@ -180,8 +188,11 @@ class FirebaseCloudGateway(
                                 isEmergency = true
                             )
                         }
-                    } else if (!isEmergency && context != null) {
-                        com.project.garuda.notification.GarudaNotificationManager.dismissEmergencyNotification(context)
+                    } else if (!isEmergency) {
+                        persistence?.setLastAlertActiveState(false)
+                        if (context != null) {
+                            com.project.garuda.notification.GarudaNotificationManager.dismissEmergencyNotification(context)
+                        }
                     }
                 }
             } else if (connection.responseCode == 404) {
@@ -301,5 +312,220 @@ class FirebaseCloudGateway(
         } catch (e: Exception) {
             Log.v(TAG, "Mesh peer upload note: ${e.message}")
         }
+    }
+
+    suspend fun fetchReliefSheltersFromFirestore(): List<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/relief_shelters?key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "GET"
+            }
+            if (connection.responseCode == 200) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                reader.close()
+                val json = JSONObject(response)
+                val docs = json.optJSONArray("documents")
+                val list = mutableListOf<JSONObject>()
+                if (docs != null) {
+                    for (i in 0 until docs.length()) {
+                        list.add(docs.getJSONObject(i))
+                    }
+                }
+                return@withContext list
+            }
+        } catch (e: Exception) {
+            Log.v(TAG, "Shelter fetch note: ${e.message}")
+        }
+        return@withContext emptyList()
+    }
+
+    suspend fun fetchHazardsFromFirestore(): List<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/hazard_reports?key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "GET"
+            }
+            if (connection.responseCode == 200) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                reader.close()
+                val json = JSONObject(response)
+                val docs = json.optJSONArray("documents")
+                val list = mutableListOf<JSONObject>()
+                if (docs != null) {
+                    for (i in 0 until docs.length()) {
+                        list.add(docs.getJSONObject(i))
+                    }
+                }
+                return@withContext list
+            }
+        } catch (e: Exception) {
+            Log.v(TAG, "Hazard fetch note: ${e.message}")
+        }
+        return@withContext emptyList()
+    }
+
+    suspend fun uploadHazardReport(
+        title: String,
+        category: String,
+        description: String,
+        severity: String,
+        latitude: Double,
+        longitude: Double,
+        reporterName: String = "Citizen Node",
+        imageProof: String? = null,
+        isCameraVerified: Boolean = false
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val docId = "HAZARD-${System.currentTimeMillis()}"
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/hazard_reports/$docId?key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 4000
+                readTimeout = 4000
+                requestMethod = "PATCH"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+            }
+
+            val fields = JSONObject().apply {
+                put("title", JSONObject().put("stringValue", title))
+                put("category", JSONObject().put("stringValue", category))
+                put("description", JSONObject().put("stringValue", description))
+                put("reporterName", JSONObject().put("stringValue", reporterName))
+                put("latitude", JSONObject().put("doubleValue", latitude))
+                put("longitude", JSONObject().put("doubleValue", longitude))
+                put("isVerified", JSONObject().put("booleanValue", isCameraVerified))
+                put("isCameraVerified", JSONObject().put("booleanValue", isCameraVerified))
+                if (!imageProof.isNullOrBlank()) {
+                    put("imageProof", JSONObject().put("stringValue", imageProof))
+                }
+                put("status", JSONObject().put("stringValue", if (isCameraVerified) "Camera Verified" else "Pending Review"))
+                put("peerConfirmations", JSONObject().put("integerValue", "1"))
+                put("severity", JSONObject().put("stringValue", severity))
+                put("timestamp", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
+            }
+
+            val body = JSONObject().put("fields", fields)
+            val writer = OutputStreamWriter(connection.outputStream)
+            writer.write(body.toString())
+            writer.flush()
+            writer.close()
+
+            return@withContext connection.responseCode in 200..299
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to upload hazard report: ${e.message}")
+            return@withContext false
+        }
+    }
+
+    suspend fun confirmHazardOnFirestore(hazardId: String, currentConfirmations: Int): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/hazard_reports/$hazardId?updateMask.fieldPaths=peerConfirmations&key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "PATCH"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+            }
+
+            val fields = JSONObject().apply {
+                put("peerConfirmations", JSONObject().put("integerValue", "${currentConfirmations + 1}"))
+            }
+            val body = JSONObject().put("fields", fields)
+            val writer = OutputStreamWriter(connection.outputStream)
+            writer.write(body.toString())
+            writer.flush()
+            writer.close()
+
+            return@withContext connection.responseCode in 200..299
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to confirm hazard on Firestore: ${e.message}")
+            return@withContext false
+        }
+    }
+
+    suspend fun uploadMeshChatMessage(
+        msgId: String,
+        senderId: String,
+        senderName: String,
+        targetId: String,
+        text: String,
+        audioBase64: String?,
+        audioDurationSec: Int
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/mesh_chat/$msgId?key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "PATCH"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+            }
+
+            val fields = JSONObject().apply {
+                put("msgId", JSONObject().put("stringValue", msgId))
+                put("senderId", JSONObject().put("stringValue", senderId))
+                put("senderName", JSONObject().put("stringValue", senderName))
+                put("targetId", JSONObject().put("stringValue", targetId))
+                put("text", JSONObject().put("stringValue", text))
+                if (!audioBase64.isNullOrBlank()) {
+                    put("audioBase64", JSONObject().put("stringValue", audioBase64))
+                }
+                put("audioDurationSec", JSONObject().put("integerValue", "$audioDurationSec"))
+                put("timestamp", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
+            }
+
+            val body = JSONObject().put("fields", fields)
+            val writer = OutputStreamWriter(connection.outputStream)
+            writer.write(body.toString())
+            writer.flush()
+            writer.close()
+
+            return@withContext connection.responseCode in 200..299
+        } catch (e: Exception) {
+            Log.v(TAG, "Chat upload error: ${e.message}")
+            return@withContext false
+        }
+    }
+
+    suspend fun fetchMeshChatMessages(): List<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/mesh_chat?key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "GET"
+            }
+            if (connection.responseCode == 200) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                reader.close()
+                val json = JSONObject(response)
+                val docs = json.optJSONArray("documents")
+                val list = mutableListOf<JSONObject>()
+                if (docs != null) {
+                    for (i in 0 until docs.length()) {
+                        list.add(docs.getJSONObject(i))
+                    }
+                }
+                return@withContext list
+            }
+        } catch (e: Exception) {
+            Log.v(TAG, "Chat fetch error: ${e.message}")
+        }
+        return@withContext emptyList()
     }
 }

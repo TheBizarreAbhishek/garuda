@@ -13,6 +13,14 @@ import com.project.garuda.mesh.protocol.GarudaPacket
 import com.project.garuda.mesh.service.MeshForegroundService
 import com.project.garuda.network.FirebaseCloudGateway
 import com.project.garuda.network.UplinkGatewayManager
+import com.project.garuda.data.CitizenPersistenceManager
+import com.project.garuda.ui.chat.MeshChatMessage
+import com.project.garuda.ui.hazards.HazardAlert
+import com.project.garuda.ui.shelter.ReliefShelter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import android.location.Location
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,8 +39,39 @@ class CitizenViewModel(
         private const val TAG = "CitizenViewModel"
     }
 
-    private val _uiState = MutableStateFlow(CitizenUiState())
+    private val persistenceManager: CitizenPersistenceManager? = appContext?.let { CitizenPersistenceManager(it) }
+
+    private var localDeviceHash: Int = persistenceManager?.getOrCreateDeviceHash() ?: (Build.MODEL ?: "GarudaNode").hashCode()
+
+    val myDeviceId: String = {
+        "GD-" + Math.abs(localDeviceHash).toString(16).uppercase().padStart(4, '0').take(6)
+    }()
+
+    private val _uiState = MutableStateFlow(
+        CitizenUiState(
+            medicalProfile = persistenceManager?.loadMedicalProfile((Build.MANUFACTURER ?: "User") + " " + (Build.MODEL ?: "Device")) ?: MedicalProfile(fullName = (Build.MANUFACTURER ?: "User") + " " + (Build.MODEL ?: "Device")),
+            survivalChecklist = persistenceManager?.loadChecklist() ?: defaultChecklist()
+        )
+    )
     val uiState: StateFlow<CitizenUiState> = _uiState.asStateFlow()
+
+    // Mesh Chatroom Stream (Public & Private)
+    private val _chatMessages = MutableStateFlow<List<MeshChatMessage>>(emptyList())
+    val chatMessages: StateFlow<List<MeshChatMessage>> = _chatMessages.asStateFlow()
+
+    // Private Family Mesh Contacts
+    private val _privateContacts = MutableStateFlow<List<com.project.garuda.data.PrivateMeshContact>>(
+        persistenceManager?.loadPrivateContacts() ?: emptyList()
+    )
+    val privateContacts: StateFlow<List<com.project.garuda.data.PrivateMeshContact>> = _privateContacts.asStateFlow()
+
+    // Dynamic Live Shelter Radar Stream
+    private val _shelters = MutableStateFlow<List<ReliefShelter>>(emptyList())
+    val shelters: StateFlow<List<ReliefShelter>> = _shelters.asStateFlow()
+
+    // Dynamic Hazard Alerts Stream
+    private val _hazardList = MutableStateFlow<List<HazardAlert>>(emptyList())
+    val hazardList: StateFlow<List<HazardAlert>> = _hazardList.asStateFlow()
 
     private var countdownJob: Job? = null
     private var broadcastingJob: Job? = null
@@ -46,17 +85,12 @@ class CitizenViewModel(
     val firebaseGateway = FirebaseCloudGateway(viewModelScope, appContext)
     val uplinkGateway = UplinkGatewayManager(viewModelScope, appContext)
 
-    private var localDeviceHash: Int = 0
-
     init {
-        localDeviceHash = appContext?.let { ctx ->
-            android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID)?.hashCode()
-        } ?: (Build.MODEL ?: "GarudaNode").hashCode()
-
         initBleMeshEngine()
         observeFirebaseGovernmentAlerts()
         observeUplinkGatewayEvents()
         observeMeshTelemetry()
+        startSheltersAndHazardsSync()
     }
 
     private fun observeUplinkGatewayEvents() {
@@ -124,6 +158,74 @@ class CitizenViewModel(
                             )
                         }
 
+                        // 💬 Mesh Walkie-Talkie Chat Packets (Public Broadcast + Targeted Private Direct)
+                        if (packet.packetType == GarudaPacket.TYPE_CHAT) {
+                            val rawString = try {
+                                String(packet.payload, Charsets.UTF_8).trim()
+                            } catch (e: Exception) { "" }
+                            if (rawString.isNotBlank()) {
+                                val isMine = packet.deviceHash == localDeviceHash
+                                val senderId = "GD-" + Math.abs(packet.deviceHash).toString(16).uppercase().padStart(4, '0').take(6)
+
+                                var targetId = ""
+                                var content = rawString
+                                var audioBase64: String? = null
+                                var audioDur = 0
+                                var isVoice = false
+
+                                if (content.startsWith("[PRIVATE:")) {
+                                    val endIdx = content.indexOf(']')
+                                    if (endIdx != -1) {
+                                        targetId = content.substring(9, endIdx).trim()
+                                        content = content.substring(endIdx + 1).trim()
+                                    }
+                                } else if (content.startsWith("[PRIVATE_VOICE:")) {
+                                    val endIdx = content.indexOf(']')
+                                    if (endIdx != -1) {
+                                        val meta = content.substring(15, endIdx).split(':')
+                                        targetId = meta.getOrNull(0)?.trim() ?: ""
+                                        audioDur = meta.getOrNull(1)?.toIntOrNull() ?: 1
+                                        audioBase64 = content.substring(endIdx + 1).trim()
+                                        content = "🎙️ Voice Walkie-Talkie ($audioDur s)"
+                                        isVoice = true
+                                    }
+                                } else if (content.startsWith("[VOICE:")) {
+                                    val endIdx = content.indexOf(']')
+                                    if (endIdx != -1) {
+                                        audioDur = content.substring(7, endIdx).toIntOrNull() ?: 1
+                                        audioBase64 = content.substring(endIdx + 1).trim()
+                                        content = "🎙️ Public Walkie-Talkie ($audioDur s)"
+                                        isVoice = true
+                                    }
+                                }
+
+                                val isForMe = targetId.isEmpty() || targetId.equals(myDeviceId, ignoreCase = true) || isMine
+                                if (isForMe) {
+                                    val contactName = _privateContacts.value.firstOrNull { it.deviceId.equals(senderId, ignoreCase = true) }?.name
+                                    val sender = if (isMine) "You" else (contactName ?: "Peer $senderId")
+                                    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                                    val timeStr = timeFormat.format(Date(packet.timestamp * 1000L))
+                                    val newMsg = MeshChatMessage(
+                                        id = "msg-${packet.packetId}-${packet.timestamp}",
+                                        senderName = sender,
+                                        senderId = senderId,
+                                        targetId = targetId,
+                                        senderRole = if (isMine) "You" else if (targetId.isNotEmpty()) "Private Family" else "Relay Peer",
+                                        text = content,
+                                        audioBase64 = audioBase64,
+                                        audioDurationSec = audioDur,
+                                        timestamp = timeStr,
+                                        hopCount = packet.hopCount,
+                                        isFromMe = isMine,
+                                        isVoiceMessage = isVoice
+                                    )
+                                    _chatMessages.update { list ->
+                                        if (list.any { it.id == newMsg.id }) list else list + newMsg
+                                    }
+                                }
+                            }
+                        }
+
                         // 🌐 EDGE GATEWAY RELAY TO CLOUD: If this phone has Internet, relay ONLY offline mesh peers (who do not have direct internet)
                         val isPeerDirectOnline = (packet.emergencyType == 0x7F.toByte())
                         if (firebaseGateway.syncState.value.isConnected && 
@@ -155,14 +257,22 @@ class CitizenViewModel(
                                 }
                             }
 
-                            appContext?.let { ctx ->
-                                com.project.garuda.notification.GarudaNotificationManager.showHeadsUpNotification(
-                                    context = ctx,
-                                    title = "DISASTER EMERGENCY (MESH RELAY)",
-                                    message = "Critical disaster declaration received via Bluetooth Mesh multi-hop relay. Evacuate or seek immediate high ground.",
-                                    targetArea = "Your Region",
-                                    isEmergency = true
-                                )
+                            val packetTime = packet.timestamp.toLong()
+                            val lastSavedTs = persistenceManager?.getLastAlertNotifiedTimestamp() ?: 0L
+                            val shouldNotify = (packetTime > lastSavedTs && packetTime > 0L)
+
+                            if (shouldNotify) {
+                                persistenceManager?.setLastAlertNotifiedTimestamp(packetTime)
+                                persistenceManager?.setLastAlertActiveState(true)
+                                appContext?.let { ctx ->
+                                    com.project.garuda.notification.GarudaNotificationManager.showHeadsUpNotification(
+                                        context = ctx,
+                                        title = "DISASTER EMERGENCY (MESH RELAY)",
+                                        message = "Critical disaster declaration received via Bluetooth Mesh multi-hop relay. Evacuate or seek immediate high ground.",
+                                        targetArea = "Your Region",
+                                        isEmergency = true
+                                    )
+                                }
                             }
                             if (_uiState.value.mode == DisasterMode.STANDBY && !_uiState.value.isGovernmentAlertDialogOpen) {
                                 _uiState.update {
@@ -271,16 +381,331 @@ class CitizenViewModel(
         }
     }
 
+    private fun startSheltersAndHazardsSync() {
+        viewModelScope.launch {
+            while (isActive) {
+                try {
+                    // 1. Fetch live shelters from Firestore or fallback
+                    val cloudShelters = firebaseGateway.fetchReliefSheltersFromFirestore()
+                    val loc = firebaseGateway.hardwareManager?.locationFlow?.value
+                    val uLat = if (loc != null && loc.hasValidLocation && loc.latitude != 0.0) loc.latitude else 11.6854
+                    val uLon = if (loc != null && loc.hasValidLocation && loc.longitude != 0.0) loc.longitude else 76.1320
+
+                    val parsedShelters = if (cloudShelters.isNotEmpty()) {
+                        cloudShelters.mapNotNull { doc ->
+                            val fields = doc.optJSONObject("fields") ?: return@mapNotNull null
+                            val nameDoc = doc.optString("name", "")
+                            val docId = nameDoc.substringAfterLast("/")
+                            val name = fields.optJSONObject("name")?.optString("stringValue") ?: "Relief Shelter"
+                            val lat = fields.optJSONObject("latitude")?.optDouble("doubleValue") ?: 0.0
+                            val lon = fields.optJSONObject("longitude")?.optDouble("doubleValue") ?: 0.0
+                            val cap = fields.optJSONObject("capacity")?.optString("integerValue")?.toIntOrNull() ?: 500
+                            val occ = fields.optJSONObject("currentOccupancy")?.optString("integerValue")?.toIntOrNull() ?: 0
+                            val supplies = fields.optJSONObject("suppliesStatus")?.optString("stringValue") ?: "Supplies Available"
+                            val phone = fields.optJSONObject("contactPhone")?.optString("stringValue") ?: "1078 (Helpline)"
+
+                            val results = FloatArray(2)
+                            Location.distanceBetween(uLat, uLon, lat, lon, results)
+                            val dist = results[0].toInt()
+                            val bearing = (results[1] + 360f) % 360f
+
+                            // Strict Proximity Filter: Show only shelters within 50km reachable district perimeter
+                            if (dist <= 50_000) {
+                                ReliefShelter(
+                                    id = docId,
+                                    name = name,
+                                    latitude = lat,
+                                    longitude = lon,
+                                    distanceMeters = dist,
+                                    bearingDegrees = bearing,
+                                    capacityCurrent = occ,
+                                    capacityMax = cap,
+                                    hasMedical = true,
+                                    hasWater = true,
+                                    hasPower = true,
+                                    statusText = "$supplies • ${maxOf(0, cap - occ)} Spots Open",
+                                    phone = phone
+                                )
+                            } else {
+                                null
+                            }
+                        }.sortedBy { it.distanceMeters }
+                    } else {
+                        emptyList()
+                    }
+
+                    _shelters.value = parsedShelters
+
+                    // 2. Fetch live hazards from Firestore
+                    val cloudHazards = firebaseGateway.fetchHazardsFromFirestore()
+                    if (cloudHazards.isNotEmpty()) {
+                        val parsedHazards = cloudHazards.mapNotNull { doc ->
+                            val fields = doc.optJSONObject("fields") ?: return@mapNotNull null
+                            val nameDoc = doc.optString("name", "")
+                            val docId = nameDoc.substringAfterLast("/")
+                            val title = fields.optJSONObject("title")?.optString("stringValue") ?: "Hazard"
+                            val desc = fields.optJSONObject("description")?.optString("stringValue") ?: ""
+                            val severity = fields.optJSONObject("severity")?.optString("stringValue") ?: "High"
+                            val lat = fields.optJSONObject("latitude")?.optDouble("doubleValue") ?: 0.0
+                            val lon = fields.optJSONObject("longitude")?.optDouble("doubleValue") ?: 0.0
+                            val confirmations = fields.optJSONObject("peerConfirmations")?.optString("integerValue")?.toIntOrNull() ?: 1
+                            val imageProof = fields.optJSONObject("imageProof")?.optString("stringValue")
+                            val isCamVerified = fields.optJSONObject("isCameraVerified")?.optBoolean("booleanValue") ?: false
+
+                            val res = FloatArray(2)
+                            Location.distanceBetween(uLat, uLon, lat, lon, res)
+                            val dist = res[0].toInt()
+
+                            HazardAlert(
+                                id = docId,
+                                title = title,
+                                location = desc.ifBlank { "GPS: ${String.format("%.4f", lat)}, ${String.format("%.4f", lon)}" },
+                                distanceMeters = dist,
+                                severity = severity.uppercase(),
+                                reportedAgo = "Live Feed",
+                                confirmationCount = confirmations,
+                                imageProof = imageProof,
+                                isCameraVerified = isCamVerified,
+                                latitude = lat,
+                                longitude = lon
+                            )
+                        }.sortedBy { it.distanceMeters }
+                        _hazardList.value = parsedHazards
+                    }
+
+                    // 3. Fetch live mesh chat messages (Public & Private)
+                    val cloudChat = firebaseGateway.fetchMeshChatMessages()
+                    if (cloudChat.isNotEmpty()) {
+                        val parsedChat = cloudChat.mapNotNull { doc ->
+                            val fields = doc.optJSONObject("fields") ?: return@mapNotNull null
+                            val msgId = fields.optJSONObject("msgId")?.optString("stringValue") ?: return@mapNotNull null
+                            val senderId = fields.optJSONObject("senderId")?.optString("stringValue") ?: "Peer"
+                            val senderName = fields.optJSONObject("senderName")?.optString("stringValue") ?: senderId
+                            val targetId = fields.optJSONObject("targetId")?.optString("stringValue") ?: ""
+                            val text = fields.optJSONObject("text")?.optString("stringValue") ?: ""
+                            val audioBase64 = fields.optJSONObject("audioBase64")?.optString("stringValue")
+                            val audioDurationSec = fields.optJSONObject("audioDurationSec")?.optString("integerValue")?.toIntOrNull() ?: 0
+                            val tsEpoch = fields.optJSONObject("timestamp")?.optString("integerValue")?.toLongOrNull() ?: (System.currentTimeMillis() / 1000)
+
+                            val isMine = senderId.equals(myDeviceId, ignoreCase = true)
+                            val isForMe = targetId.isEmpty() || targetId.equals(myDeviceId, ignoreCase = true) || isMine
+
+                            if (!isForMe) return@mapNotNull null
+
+                            val contactName = _privateContacts.value.firstOrNull { it.deviceId.equals(senderId, ignoreCase = true) }?.name
+                            val sName = if (isMine) "You" else (contactName ?: senderName)
+                            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                            val timeStr = timeFormat.format(Date(tsEpoch * 1000L))
+
+                            MeshChatMessage(
+                                id = msgId,
+                                senderName = sName,
+                                senderId = senderId,
+                                targetId = targetId,
+                                senderRole = if (isMine) "You" else if (targetId.isNotEmpty()) "Private Family" else "Mesh Peer",
+                                text = if (audioBase64 != null) "🎙️ Voice Walkie-Talkie ($audioDurationSec s)" else text,
+                                audioBase64 = audioBase64,
+                                audioDurationSec = audioDurationSec,
+                                timestamp = timeStr,
+                                hopCount = 0,
+                                isFromMe = isMine,
+                                isVoiceMessage = audioBase64 != null
+                            )
+                        }
+
+                        _chatMessages.update { currentList ->
+                            var updated = currentList
+                            for (cMsg in parsedChat) {
+                                if (updated.none { it.id == cMsg.id }) {
+                                    updated = updated + cMsg
+                                }
+                            }
+                            updated
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.v(TAG, "Sync error: ${e.message}")
+                }
+                delay(3000) // Sync every 3s
+            }
+        }
+    }
+
+    fun sendMeshChatMessage(
+        text: String,
+        targetDeviceId: String = "",
+        audioBase64: String? = null,
+        audioDurationSec: Int = 0
+    ) {
+        if (text.isBlank() && audioBase64 == null) return
+        val nowEpoch = (System.currentTimeMillis() / 1000).toInt()
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val timeStr = timeFormat.format(Date())
+        val packetId = Random.nextInt(10000, 99999)
+        val isVoice = audioBase64 != null
+
+        val localMsg = MeshChatMessage(
+            id = "msg-$packetId-$nowEpoch",
+            senderName = "You",
+            senderId = myDeviceId,
+            targetId = targetDeviceId,
+            senderRole = "You",
+            text = if (isVoice) "🎙️ Voice Walkie-Talkie ($audioDurationSec s)" else text,
+            audioBase64 = audioBase64,
+            audioDurationSec = audioDurationSec,
+            timestamp = timeStr,
+            hopCount = 0,
+            isFromMe = true,
+            isVoiceMessage = isVoice
+        )
+        _chatMessages.update { it + localMsg }
+
+        // Format packet payload for BLE mesh transmission
+        val payloadString = when {
+            isVoice && targetDeviceId.isNotEmpty() -> "[PRIVATE_VOICE:$targetDeviceId:$audioDurationSec]$audioBase64"
+            isVoice -> "[VOICE:$audioDurationSec]$audioBase64"
+            targetDeviceId.isNotEmpty() -> "[PRIVATE:$targetDeviceId]$text"
+            else -> text
+        }
+
+        // Broadcast over multi-hop BLE Mesh
+        val packet = GarudaPacket(
+            packetType = GarudaPacket.TYPE_CHAT,
+            packetId = packetId,
+            deviceHash = localDeviceHash,
+            timestamp = nowEpoch,
+            latitude = firebaseGateway.hardwareManager?.locationFlow?.value?.latitude ?: 0.0,
+            longitude = firebaseGateway.hardwareManager?.locationFlow?.value?.longitude ?: 0.0,
+            emergencyType = GarudaPacket.EMERGENCY_NONE,
+            hopCount = 0,
+            ttl = GarudaPacket.DEFAULT_TTL,
+            payload = payloadString.toByteArray(Charsets.UTF_8)
+        )
+        try {
+            meshRelayEngine?.broadcastPacket(packet)
+            Log.d(TAG, "Broadcasted Mesh Chat (target='$targetDeviceId', voice=$isVoice)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to broadcast chat packet", e)
+        }
+
+        // Dual Delivery: Also upload to Firebase Cloud Gateway so messages never drop across cellular/wifi/gateway
+        viewModelScope.launch {
+            firebaseGateway.uploadMeshChatMessage(
+                msgId = localMsg.id,
+                senderId = myDeviceId,
+                senderName = _uiState.value.medicalProfile.fullName.ifBlank { myDeviceId },
+                targetId = targetDeviceId,
+                text = text,
+                audioBase64 = audioBase64,
+                audioDurationSec = audioDurationSec
+            )
+        }
+    }
+
+    fun addPrivateContact(name: String, deviceId: String, relation: String = "Family") {
+        if (name.isBlank() || deviceId.isBlank()) return
+        val newContact = com.project.garuda.data.PrivateMeshContact(
+            id = "contact-${System.currentTimeMillis()}",
+            name = name.trim(),
+            deviceId = deviceId.trim().uppercase(),
+            relation = relation.trim().ifBlank { "Family" }
+        )
+        val updated = _privateContacts.value + newContact
+        _privateContacts.value = updated
+        persistenceManager?.savePrivateContacts(updated)
+    }
+
+    fun deletePrivateContact(id: String) {
+        val updated = _privateContacts.value.filter { it.id != id }
+        _privateContacts.value = updated
+        persistenceManager?.savePrivateContacts(updated)
+    }
+
+    fun reportHazard(
+        title: String,
+        location: String,
+        severity: String,
+        description: String,
+        imageBase64: String? = null,
+        isCameraVerified: Boolean = false
+    ) {
+        val loc = firebaseGateway.hardwareManager?.locationFlow?.value
+        val lat = loc?.latitude ?: 11.6854
+        val lon = loc?.longitude ?: 76.1320
+        val hazardId = "haz-${System.currentTimeMillis()}"
+
+        val localHazard = HazardAlert(
+            id = hazardId,
+            title = title,
+            location = location.ifBlank { description },
+            distanceMeters = 0,
+            severity = severity.uppercase(),
+            reportedAgo = "Just now",
+            confirmationCount = 1,
+            imageProof = imageBase64,
+            isCameraVerified = isCameraVerified,
+            latitude = lat,
+            longitude = lon
+        )
+        _hazardList.update { listOf(localHazard) + it }
+
+        viewModelScope.launch {
+            val reporter = _uiState.value.medicalProfile.fullName
+            firebaseGateway.uploadHazardReport(
+                title = title,
+                category = "Obstacle / Danger",
+                description = if (description.isNotBlank()) description else location,
+                severity = severity,
+                latitude = lat,
+                longitude = lon,
+                reporterName = reporter,
+                imageProof = imageBase64,
+                isCameraVerified = isCameraVerified
+            )
+        }
+
+        // Broadcast via BLE Mesh
+        val packet = GarudaPacket(
+            packetType = GarudaPacket.TYPE_EMERGENCY_BROADCAST,
+            packetId = Random.nextInt(10000, 99999),
+            deviceHash = localDeviceHash,
+            timestamp = (System.currentTimeMillis() / 1000).toInt(),
+            latitude = lat,
+            longitude = lon,
+            emergencyType = GarudaPacket.EMERGENCY_TRAPPED,
+            hopCount = 0,
+            ttl = 5,
+            payload = "$title: $description".toByteArray(Charsets.UTF_8)
+        )
+        meshRelayEngine?.broadcastPacket(packet)
+    }
+
+    fun confirmHazard(hazardId: String) {
+        _hazardList.update { list ->
+            list.map { h ->
+                if (h.id == hazardId) {
+                    val updatedCount = h.confirmationCount + 1
+                    viewModelScope.launch {
+                        firebaseGateway.confirmHazardOnFirestore(hazardId, h.confirmationCount)
+                    }
+                    h.copy(confirmationCount = updatedCount)
+                } else h
+            }
+        }
+    }
+
     fun toggleChecklistItem(id: String) {
         _uiState.update { current ->
             val updated = current.survivalChecklist.map { item ->
                 if (item.id == id) item.copy(isChecked = !item.isChecked) else item
             }
+            persistenceManager?.saveChecklist(updated)
             current.copy(survivalChecklist = updated)
         }
     }
 
     fun updateMedicalProfile(profile: MedicalProfile) {
+        persistenceManager?.saveMedicalProfile(profile)
         _uiState.update { it.copy(medicalProfile = profile) }
     }
 
