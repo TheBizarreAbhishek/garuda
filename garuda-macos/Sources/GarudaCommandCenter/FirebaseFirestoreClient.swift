@@ -288,6 +288,31 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         URLSession.shared.dataTask(with: request).resume()
     }
     
+    // MARK: - Publish Push Notification to Firestore
+    public func publishNotification(title: String, message: String, priority: String, targetArea: String) {
+        let notifId = UUID().uuidString
+        guard let url = URL(string: "\(firestoreBaseUrl)/notifications?documentId=\(notifId)&key=\(apiKey)") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "fields": [
+                "title": ["stringValue": title],
+                "message": ["stringValue": message],
+                "priority": ["stringValue": priority],
+                "targetArea": ["stringValue": targetArea],
+                "timestamp": ["integerValue": "\(Int(Date().timeIntervalSince1970))"]
+            ]
+        ]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
+        request.httpBody = jsonData
+        
+        URLSession.shared.dataTask(with: request).resume()
+    }
+    
     // MARK: - Update Signal Status on Firestore
     public func updateSignalStatusOnCloud(signalId: String, status: RescueStatus, assignedUnit: String?) {
         guard let url = URL(string: "\(firestoreBaseUrl)/disaster_sos/\(signalId)?updateMask.fieldPaths=status&updateMask.fieldPaths=assignedUnit&key=\(apiKey)") else { return }

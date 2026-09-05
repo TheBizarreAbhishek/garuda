@@ -12,6 +12,7 @@ import com.project.garuda.mesh.engine.MeshRelayEngine
 import com.project.garuda.mesh.protocol.GarudaPacket
 import com.project.garuda.mesh.service.MeshForegroundService
 import com.project.garuda.network.FirebaseCloudGateway
+import com.project.garuda.network.UplinkGatewayManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,13 +42,39 @@ class CitizenViewModel(
     private var scannerManager: BleScannerManager? = null
     private var meshRelayEngine: MeshRelayEngine? = null
 
-    // Cloud Firebase Gateway
+    // Cloud Firebase Gateway & Local Command Grid Uplink
     val firebaseGateway = FirebaseCloudGateway(viewModelScope, appContext)
+    val uplinkGateway = UplinkGatewayManager(viewModelScope, appContext)
 
     init {
         initBleMeshEngine()
         observeFirebaseGovernmentAlerts()
+        observeUplinkGatewayEvents()
         observeMeshTelemetry()
+    }
+
+    private fun observeUplinkGatewayEvents() {
+        viewModelScope.launch {
+            uplinkGateway.connectionState.collect { connState ->
+                if (connState.isEmergencyActiveFromGov) {
+                    if (_uiState.value.mode == DisasterMode.STANDBY && !_uiState.value.isGovernmentAlertDialogOpen) {
+                        _uiState.update {
+                            it.copy(
+                                pendingGovAlert = GovernmentAlert(
+                                    headline = connState.alertHeadline,
+                                    region = connState.activeDistrictAlert,
+                                    instructions = connState.alertInstructions,
+                                    timestampFormatted = "Live from Command Grid"
+                                ),
+                                isGovernmentAlertDialogOpen = true
+                            )
+                        }
+                    }
+                } else if (!connState.isEmergencyActiveFromGov && _uiState.value.isGovernmentAlertDialogOpen) {
+                    _uiState.update { it.copy(isGovernmentAlertDialogOpen = false) }
+                }
+            }
+        }
     }
 
     private fun initBleMeshEngine() {

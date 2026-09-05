@@ -20,6 +20,9 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
+import android.content.Context
+import com.project.garuda.notification.GarudaNotificationManager
+
 data class GatewayConnectionState(
     val isConnected: Boolean = false,
     val serverHost: String = "127.0.0.1",
@@ -33,7 +36,8 @@ data class GatewayConnectionState(
 )
 
 class UplinkGatewayManager(
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val context: Context? = null
 ) {
     companion object {
         private const val TAG = "GarudaUplink"
@@ -46,7 +50,7 @@ class UplinkGatewayManager(
     private var healthCheckJob: Job? = null
 
     // Candidates to auto-discover: localhost (adb reverse), typical hotspot gateways, and Mac Wi-Fi IP
-    private val hostCandidates = listOf("127.0.0.1", "10.0.2.2", "10.50.7.238", "192.168.1.100", "192.168.43.1")
+    private val hostCandidates = listOf("127.0.0.1", "10.0.2.2", "192.168.1.100", "192.168.43.1")
     private var activeHost = "127.0.0.1"
     private var activePort = 8080
 
@@ -70,7 +74,7 @@ class UplinkGatewayManager(
         healthCheckJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 checkServerReachability()
-                kotlinx.coroutines.delay(5000)
+                kotlinx.coroutines.delay(4000)
             }
         }
     }
@@ -141,24 +145,39 @@ class UplinkGatewayManager(
 
                 val reader = BufferedReader(InputStreamReader(connection.inputStream))
                 var line: String?
+                var currentEvent: String = "message"
 
                 while (isActive) {
                     line = reader.readLine() ?: break
-                    if (line.startsWith("data: ")) {
+                    if (line.startsWith("event: ")) {
+                        currentEvent = line.removePrefix("event: ").trim()
+                    } else if (line.startsWith("data: ")) {
                         val dataJson = line.removePrefix("data: ")
                         try {
                             val json = JSONObject(dataJson)
-                            val title = json.optString("title", "EMERGENCY BROADCAST")
-                            val severity = json.optString("severity", "Level 3 - Critical")
-                            val district = json.optString("district", "All Districts")
-                            val instructions = json.optString("instructions", "Evacuate immediately.")
+                            val title = json.optString("title", "GOVERNMENT BROADCAST")
+                            val message = json.optString("message", json.optString("instructions", "New directive received."))
+                            val targetArea = json.optString("targetArea", json.optString("district", "All Regions"))
+                            val priority = json.optString("priority", json.optString("severity", "HIGH"))
+                            val isEmergency = (currentEvent == "emergency_activated") || priority.contains("Critical", true)
 
                             _connectionState.value = _connectionState.value.copy(
-                                isEmergencyActiveFromGov = true,
-                                activeDistrictAlert = district,
+                                isEmergencyActiveFromGov = isEmergency,
+                                activeDistrictAlert = targetArea,
                                 alertHeadline = title,
-                                alertInstructions = "$severity: $instructions"
+                                alertInstructions = "$priority: $message"
                             )
+
+                            // Trigger real-time system notification on citizen phone!
+                            if (context != null) {
+                                GarudaNotificationManager.showHeadsUpNotification(
+                                    context = context,
+                                    title = title,
+                                    message = message,
+                                    targetArea = targetArea,
+                                    isEmergency = isEmergency
+                                )
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error parsing SSE event: $e")
                         }

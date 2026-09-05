@@ -94,60 +94,12 @@ class GarudaFirebaseMessagingService : FirebaseMessagingService() {
         val severity = data["severity"] ?: "CRITICAL"
         val isEmergency = data["isEmergency"]?.toBoolean() ?: (severity.contains("Critical", true) || severity.contains("Red", true))
 
-        showHeadsUpNotification(
+        GarudaNotificationManager.showHeadsUpNotification(
+            context = this,
             title = title,
             message = message,
             targetArea = targetArea,
             isEmergency = isEmergency
         )
-    }
-
-    private fun showHeadsUpNotification(
-        title: String,
-        message: String,
-        targetArea: String,
-        isEmergency: Boolean
-    ) {
-        createNotificationChannels(this)
-
-        val channelId = if (isEmergency) CHANNEL_EMERGENCY_ALERTS else CHANNEL_CITIZEN_NOTIFICATIONS
-        val notificationId = System.currentTimeMillis().toInt()
-
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("EXTRA_NOTIFICATION_TITLE", title)
-            putExtra("EXTRA_NOTIFICATION_MESSAGE", message)
-            putExtra("EXTRA_TARGET_AREA", targetArea)
-            putExtra("EXTRA_IS_EMERGENCY", isEmergency)
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            notificationId,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val builder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("🚨 $title")
-            .setContentText(message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("📍 Target: $targetArea\n\n$message"))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(if (isEmergency) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_MESSAGE)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .setColor(if (isEmergency) Color.RED else Color.BLUE)
-            .setVibrate(longArrayOf(0, 500, 250, 500, 250, 1000))
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
-
-        try {
-            NotificationManagerCompat.from(this).notify(notificationId, builder.build())
-            Log.d(TAG, "Delivered heads-up push notification: '$title' to target area [$targetArea]")
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Notification permission not granted (Android 13+)", e)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to display notification", e)
-        }
     }
 }

@@ -121,6 +121,8 @@ class FirebaseCloudGateway(
         }
     }
 
+    private var lastNotifiedAlertTimestamp: Long = 0L
+
     private suspend fun fetchGovernmentAlertStatus() {
         try {
             val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/alerts/current_status?key=$API_KEY"
@@ -144,7 +146,10 @@ class FirebaseCloudGateway(
                     val severity = fields.optJSONObject("severity")?.optString("stringValue") ?: "Critical"
                     val district = fields.optJSONObject("targetDistrict")?.optString("stringValue") ?: "Disaster Zone"
                     val instructions = fields.optJSONObject("instructions")?.optString("stringValue") ?: "Evacuate"
-                    val isEmergency = fields.optJSONObject("isEmergencyActive")?.optBoolean("booleanValue") ?: true
+                    val isEmergency = fields.optJSONObject("isEmergencyActive")?.optBoolean("booleanValue") ?: false
+                    val alertTimestamp = fields.optJSONObject("timestamp")?.optString("integerValue")?.toLongOrNull() ?: 0L
+
+                    val isNewEmergencyAlert = isEmergency && (alertTimestamp > lastNotifiedAlertTimestamp)
 
                     _syncState.value = _syncState.value.copy(
                         isConnected = true,
@@ -154,6 +159,19 @@ class FirebaseCloudGateway(
                         alertDistrict = district,
                         alertInstructions = "$severity: $instructions"
                     )
+
+                    if (isNewEmergencyAlert) {
+                        lastNotifiedAlertTimestamp = alertTimestamp
+                        if (context != null) {
+                            com.project.garuda.notification.GarudaNotificationManager.showHeadsUpNotification(
+                                context = context,
+                                title = title,
+                                message = "$severity: $instructions",
+                                targetArea = district,
+                                isEmergency = true
+                            )
+                        }
+                    }
                 }
             } else if (connection.responseCode == 404) {
                 _syncState.value = _syncState.value.copy(
