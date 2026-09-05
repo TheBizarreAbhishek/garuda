@@ -39,7 +39,9 @@ android {
 
 dependencies {
     implementation(project(":core:mesh"))
+    implementation(project(":core:data"))
     implementation(platform(libs.androidx.compose.bom))
+
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
