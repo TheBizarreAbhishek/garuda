@@ -570,22 +570,29 @@ public struct ImdSatelliteRadarView: View {
     
     private var synopticTelemetrySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Live Severe Weather Warning Card
+            // Box 1: Live Severe Weather Warning Card
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(channelRiskColor)
                     Text("ACTIVE SYNOPTIC METEOROLOGY")
-                        .font(.system(size: 11, weight: .black, design: .monospaced))
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
                         .foregroundColor(channelRiskColor)
                     Spacer()
-                    Text("LIVE")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(.green)
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.green).frame(width: 5, height: 5)
+                        Text("LIVE")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(.green)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.green.opacity(0.15))
+                    .clipShape(Capsule())
                 }
                 
                 Text(currentChannel.precipitationRisk)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.white)
                 
                 Text("Monsoonal trough active across Bay of Bengal into Central/North India. Heavy convective towers identified via thermal radiance gradient.")
@@ -594,48 +601,78 @@ public struct ImdSatelliteRadarView: View {
                     .lineSpacing(2)
             }
             .padding(12)
-            .background(channelRiskColor.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(channelRiskColor.opacity(0.35), lineWidth: 1))
+            .background(channelRiskColor.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(channelRiskColor.opacity(0.4), lineWidth: 1)
+            )
             
-            // Detailed Radiometric Metrics Grid
-            Text("ATMOSPHERIC RADIOMETRICS")
-                .font(.system(size: 10, weight: .black, design: .monospaced))
-                .foregroundColor(.secondary)
-            
-            VStack(spacing: 8) {
-                metricRow(title: "Cloud Top Temp (CTT)", value: currentChannel.tempRange, icon: "thermometer.snowflake", color: .cyan)
-                metricRow(title: "Tropopause Cloud Altitude", value: currentChannel.cloudAltitude, icon: "arrow.up.and.down.and.sparkles", color: .purple)
-                metricRow(title: "Precipitable Water Density", value: currentChannel.moistureDensity, icon: "drop.triangle.fill", color: .blue)
-                metricRow(title: "Sub-Satellite Point (SSP)", value: "0.0°N, 74.0°E Geostationary", icon: "location.viewfinder", color: .green)
-                metricRow(title: "Radiometer Sensor Noise (NEdT)", value: "0.12 K @ 300K (Nominal)", icon: "waveform.path.ecg", color: .yellow)
-                metricRow(title: "Surface Barometric Baseline", value: "997.2 hPa (Low Pressure Trough)", icon: "barometer", color: .orange)
+            // Box 2: Atmospheric Radiometrics Card
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "gauge.with.dots.needle.bottom.50percent")
+                        .font(.system(size: 11))
+                        .foregroundColor(.cyan)
+                    Text("ATMOSPHERIC RADIOMETRICS")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.bottom, 2)
+                
+                VStack(spacing: 6) {
+                    metricRow(title: "Cloud Top Temp (CTT)", value: currentChannel.tempRange, icon: "thermometer.snowflake", color: .cyan)
+                    metricRow(title: "Tropopause Cloud Altitude", value: currentChannel.cloudAltitude, icon: "arrow.up.and.down.and.sparkles", color: .purple)
+                    metricRow(title: "Precipitable Water Density", value: currentChannel.moistureDensity, icon: "drop.triangle.fill", color: .blue)
+                    metricRow(title: "Sub-Satellite Point (SSP)", value: "0.0°N, 74.0°E Geostationary", icon: "location.viewfinder", color: .green)
+                    metricRow(title: "Radiometer Sensor Noise", value: "0.12 K @ 300K (Nominal)", icon: "waveform.path.ecg", color: .yellow)
+                    metricRow(title: "Surface Barometric Baseline", value: "997.2 hPa (Low Pressure Trough)", icon: "barometer", color: .orange)
+                }
             }
+            .padding(12)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
             
-            Divider().padding(.vertical, 4)
-            
-            // Channel Tactical Interpretation
+            // Box 3: Tactical Interpretation Card
             VStack(alignment: .leading, spacing: 6) {
-                Text("TACTICAL INTERPRETATION")
-                    .font(.system(size: 10, weight: .black, design: .monospaced))
-                    .foregroundColor(.cyan)
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundColor(.cyan)
+                    Text("TACTICAL INTERPRETATION")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundColor(.cyan)
+                }
                 
                 Text(currentChannel.description)
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .lineSpacing(3)
             }
-            .padding(10)
-            .background(Color.white.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(12)
+            .background(Color.cyan.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
+            )
         }
     }
     
     private var channelSelectorSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("SELECT SATELLITE PRODUCT (0ms INSTANT SWITCH)")
-                .font(.system(size: 10, weight: .black, design: .monospaced))
-                .foregroundColor(.secondary)
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.cyan)
+                Text("SELECT SATELLITE PRODUCT (0ms CACHE)")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
             
             VStack(spacing: 8) {
                 ForEach(channels) { ch in
@@ -678,11 +715,11 @@ public struct ImdSatelliteRadarView: View {
                             }
                         }
                         .padding(10)
-                        .background(selectedChannelId == ch.id ? Color.cyan.opacity(0.12) : Color.white.opacity(0.03))
+                        .background(selectedChannelId == ch.id ? Color.cyan.opacity(0.14) : Color.white.opacity(0.03))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(selectedChannelId == ch.id ? Color.cyan.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
+                                .stroke(selectedChannelId == ch.id ? Color.cyan.opacity(0.5) : Color.white.opacity(0.08), lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
@@ -693,57 +730,86 @@ public struct ImdSatelliteRadarView: View {
     
     private var spectralMatrixLegendSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("CLOUD TOP BRIGHTNESS TEMP SCALE")
-                .font(.system(size: 10, weight: .black, design: .monospaced))
-                .foregroundColor(.cyan)
-            
-            // Visual Color Scale Bar
-            VStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [.purple, .blue, .cyan, .green, .yellow, .red, .white]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(height: 16)
-                
-                HStack {
-                    Text("-80°C\n(Severe Deep)")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(.purple)
-                    Spacer()
-                    Text("-40°C\n(T-Storm)")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+            // Box 1: Temperature Gradient Bar Card
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "thermometer.sun.fill")
+                        .font(.system(size: 11))
                         .foregroundColor(.cyan)
-                    Spacer()
-                    Text("0°C\n(Mid Level)")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(.yellow)
-                    Spacer()
-                    Text("+30°C\n(Warm Land)")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
+                    Text("CLOUD TOP BRIGHTNESS TEMP SCALE")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundColor(.cyan)
                 }
-                .multilineTextAlignment(.center)
+                
+                // Visual Color Scale Bar
+                VStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [.purple, .blue, .cyan, .green, .yellow, .red, .white]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 16)
+                    
+                    HStack {
+                        Text("-80°C\n(Severe Deep)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(.purple)
+                        Spacer()
+                        Text("-40°C\n(T-Storm)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(.cyan)
+                        Spacer()
+                        Text("0°C\n(Mid Level)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(.yellow)
+                        Spacer()
+                        Text("+30°C\n(Warm Land)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                    }
+                    .multilineTextAlignment(.center)
+                }
+                .padding(10)
+                .background(Color.black.opacity(0.3))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            .padding(10)
-            .background(Color.white.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(12)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
             
-            Text("COLOR ZONE INTERPRETATION GUIDE")
-                .font(.system(size: 10, weight: .black, design: .monospaced))
-                .foregroundColor(.secondary)
-                .padding(.top, 4)
-            
-            VStack(spacing: 8) {
-                legendItem(color: .purple, title: "Violet / Dark Violet (< -70°C)", desc: "Very strong updrafts, severe cumulonimbus cells, dangerous lightning & flash-flood hail storms.")
-                legendItem(color: .red, title: "Red / Dark Red (-60°C to -50°C)", desc: "Active thunderstorm cells with high precipitation rate (>50mm/hr).")
-                legendItem(color: .yellow, title: "Yellow / Green (-40°C to -20°C)", desc: "Moderate stratiform rain and developing monsoon depression clouds.")
-                legendItem(color: .blue, title: "Blue / Grey (0°C to +15°C)", desc: "Low elevation stratus clouds and atmospheric moisture haze.")
-                legendItem(color: .white.opacity(0.8), title: "White / Gray Surface (> +20°C)", desc: "Clear sky land surface / warm oceanic water.")
+            // Box 2: Interpretation Matrix Guide Card
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "list.bullet.rectangle.portrait.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("COLOR ZONE INTERPRETATION GUIDE")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(spacing: 6) {
+                    legendItem(color: .purple, title: "Violet / Dark Violet (< -70°C)", desc: "Very strong updrafts, severe cumulonimbus cells, dangerous lightning & flash-flood hail storms.")
+                    legendItem(color: .red, title: "Red / Dark Red (-60°C to -50°C)", desc: "Active thunderstorm cells with high precipitation rate (>50mm/hr).")
+                    legendItem(color: .yellow, title: "Yellow / Green (-40°C to -20°C)", desc: "Moderate stratiform rain and developing monsoon depression clouds.")
+                    legendItem(color: .blue, title: "Blue / Grey (0°C to +15°C)", desc: "Low elevation stratus clouds and atmospheric moisture haze.")
+                    legendItem(color: .white.opacity(0.8), title: "White / Gray Surface (> +20°C)", desc: "Clear sky land surface / warm oceanic water.")
+                }
             }
+            .padding(12)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
         }
     }
     
