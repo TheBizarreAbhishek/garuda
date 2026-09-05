@@ -40,7 +40,9 @@ android {
 dependencies {
     implementation(project(":core:mesh"))
     implementation(project(":core:data"))
+    implementation(project(":core:sensors"))
     implementation(platform(libs.androidx.compose.bom))
+
 
 
     implementation(libs.androidx.activity.compose)
