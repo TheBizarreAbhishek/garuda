@@ -238,10 +238,10 @@ public struct MainAppView: View {
                     )
                 }
                 .padding(.horizontal, 12)
-                .padding(.bottom, 12)
             }
-            .frame(minWidth: 200, maxWidth: 220)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(NSColor.windowBackgroundColor))
+            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 270)
         } detail: {
             Group {
                 switch selectedTab {
