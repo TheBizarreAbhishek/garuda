@@ -46,14 +46,6 @@ fun CitizenScreen(
                 }
             }
         }
-
-        // High priority government emergency activation popup
-        if (state.isGovernmentAlertDialogOpen && state.pendingGovAlert != null) {
-            EmergencyActivationDialog(
-                alert = state.pendingGovAlert!!,
-                onAcknowledge = { viewModel.acknowledgeAlertAndEnterEmergency() },
-                onDismiss = { viewModel.dismissGovernmentAlert() }
-            )
-        }
     }
 }
+

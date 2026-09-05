@@ -124,8 +124,9 @@ class CitizenViewModel(
                                         instructions = syncState.alertInstructions,
                                         timestampFormatted = "Live from Command Grid"
                                     ),
-                                    isGovernmentAlertDialogOpen = true
+                                    isGovernmentAlertDialogOpen = false
                                 )
+
                             }
                         }
                     } else {
@@ -199,10 +200,11 @@ class CitizenViewModel(
         _uiState.update {
             it.copy(
                 pendingGovAlert = GovernmentAlert(),
-                isGovernmentAlertDialogOpen = true
+                isGovernmentAlertDialogOpen = false
             )
         }
     }
+
 
     fun dismissGovernmentAlert() {
         _uiState.update { it.copy(isGovernmentAlertDialogOpen = false) }
