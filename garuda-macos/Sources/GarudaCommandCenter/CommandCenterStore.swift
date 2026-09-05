@@ -360,7 +360,29 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                 shelters.insert(shelter, at: 0)
             }
         }
+        // 1. Sync shelter to Firebase Firestore
         FirebaseFirestoreClient.shared.publishReliefShelter(shelter)
+        
+        // 2. Publish Targeted Push Notification to Citizen Apps in Firestore
+        let notifTitle = "🚨 NEW RELIEF CAMP: \(shelter.name)"
+        let notifMsg = "Safe evacuation center active with \(shelter.capacity) beds. Location: \(String(format: "%.4f", shelter.latitude))°N, \(String(format: "%.4f", shelter.longitude))°E. Supplies: \(shelter.suppliesStatus). Helpline: \(shelter.contactPhone)."
+        FirebaseFirestoreClient.shared.publishNotification(
+            title: notifTitle,
+            message: notifMsg,
+            priority: "HIGH",
+            targetArea: "Nearby Citizens (15km Radius)"
+        )
+        
+        // 3. Add to local notification history
+        notifications.insert(
+            PushNotificationRecord(
+                title: notifTitle,
+                message: notifMsg,
+                targetArea: "Nearby Citizens (15km Radius)",
+                priority: "HIGH"
+            ),
+            at: 0
+        )
     }
     
     public func updateReliefShelter(_ shelter: ReliefShelter) {

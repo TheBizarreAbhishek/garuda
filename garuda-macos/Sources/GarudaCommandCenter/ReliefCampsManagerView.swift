@@ -6,8 +6,8 @@ public struct ReliefCampsManagerView: View {
     @ObservedObject var store: CommandCenterStore
     @State private var searchText: String = ""
     @State private var selectedFilter: CampFilter = .all
-    @State private var isShowingAddModal: Bool = false
-    @State private var editingShelter: ReliefShelter? = nil
+    @State private var isCreatingNewCamp: Bool = false
+    @State private var editingCamp: ReliefShelter? = nil
     
     enum CampFilter: String, CaseIterable {
         case all = "All Camps"
@@ -57,6 +57,26 @@ public struct ReliefCampsManagerView: View {
     }
     
     public var body: some View {
+        Group {
+            if isCreatingNewCamp || editingCamp != nil {
+                // Inline Full-Page Camp Creator / Editor (No Popup Sheet)
+                InlineReliefCampEditorView(
+                    store: store,
+                    initialShelter: editingCamp,
+                    onClose: {
+                        isCreatingNewCamp = false
+                        editingCamp = nil
+                    }
+                )
+            } else {
+                // Main Camps Dashboard & Grid View
+                mainDashboardView
+            }
+        }
+    }
+    
+    // MARK: - Main Dashboard View
+    private var mainDashboardView: some View {
         VStack(spacing: 0) {
             // 1. Top Command Header
             HStack(spacing: 12) {
@@ -97,7 +117,7 @@ public struct ReliefCampsManagerView: View {
                 Spacer()
                 
                 Button {
-                    isShowingAddModal = true
+                    isCreatingNewCamp = true
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
@@ -114,7 +134,7 @@ public struct ReliefCampsManagerView: View {
             
             Divider()
             
-            // 2. Metrics Bar (Total Camps, Capacity, Occupancy, Vacancy)
+            // 2. Metrics Bar
             HStack(spacing: 14) {
                 metricBox(
                     title: "TOTAL RELIEF CAMPS",
@@ -210,7 +230,7 @@ public struct ReliefCampsManagerView: View {
                         .frame(maxWidth: 460)
                     
                     Button {
-                        isShowingAddModal = true
+                        isCreatingNewCamp = true
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "plus.circle.fill")
@@ -232,12 +252,11 @@ public struct ReliefCampsManagerView: View {
                             ReliefCampCardView(
                                 shelter: shelter,
                                 onEdit: {
-                                    editingShelter = shelter
+                                    editingCamp = shelter
                                 },
                                 onQuickAdjust: { delta in
-                                    var updated = shelter
                                     let newOcc = max(0, min(shelter.capacity, shelter.currentOccupancy + delta))
-                                    updated = ReliefShelter(
+                                    let updated = ReliefShelter(
                                         id: shelter.id,
                                         name: shelter.name,
                                         latitude: shelter.latitude,
@@ -258,12 +277,6 @@ public struct ReliefCampsManagerView: View {
                     .padding(20)
                 }
             }
-        }
-        .sheet(isPresented: $isShowingAddModal) {
-            AddOrEditReliefCampModalView(store: store, initialShelter: nil)
-        }
-        .sheet(item: $editingShelter) { shelter in
-            AddOrEditReliefCampModalView(store: store, initialShelter: shelter)
         }
     }
     
@@ -500,11 +513,11 @@ public struct ReliefCampCardView: View {
     }
 }
 
-// MARK: - Add / Edit Relief Camp Interactive Modal Sheet
-public struct AddOrEditReliefCampModalView: View {
+// MARK: - Inline Full-Page Camp Editor / Creator (Replaces Pop-up Modal)
+public struct InlineReliefCampEditorView: View {
     @ObservedObject var store: CommandCenterStore
-    @Environment(\.dismiss) var dismiss
     let initialShelter: ReliefShelter?
+    let onClose: () -> Void
     
     @State private var name: String = ""
     @State private var capacityString: String = "500"
@@ -538,186 +551,219 @@ public struct AddOrEditReliefCampModalView: View {
         ("Bengaluru", 12.9716, 77.5946)
     ]
     
-    public init(store: CommandCenterStore, initialShelter: ReliefShelter?) {
+    public init(store: CommandCenterStore, initialShelter: ReliefShelter?, onClose: @escaping () -> Void) {
         self.store = store
         self.initialShelter = initialShelter
+        self.onClose = onClose
     }
     
     public var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
+            // Top Navigation Bar with Back Button
+            HStack(spacing: 12) {
+                Button {
+                    onClose()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("Back to Relief Camps")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                
+                Divider().frame(height: 18)
+                
                 HStack(spacing: 8) {
                     Image(systemName: "tent.fill")
                         .foregroundColor(.green)
-                    Text(initialShelter == nil ? "CREATE NEW RELIEF CAMP" : "EDIT RELIEF CAMP")
+                    Text(initialShelter == nil ? "DEPLOY NEW CIVILIAN RELIEF CAMP / SHELTER" : "EDIT RELIEF CAMP DETAILS")
                         .font(.system(size: 13, weight: .black, design: .monospaced))
                         .foregroundColor(.white)
                 }
                 
                 Spacer()
                 
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
+                HStack(spacing: 6) {
+                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                    Text("LIVE PINPOINTING ACTIVE")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundColor(.green)
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.15))
+                .clipShape(Capsule())
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
             .background(Color(NSColor.windowBackgroundColor))
             
             Divider()
             
+            // Main Two-Column Full-Page Layout: Left Map + Right Parameters
             HStack(spacing: 0) {
-                // Left Column: Interactive Map with Click-to-Pin & Place Search
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Image(systemName: "mappin.and.ellipse")
-                            .foregroundColor(.cyan)
-                        Text("PINPOINT LOCATION ON MAP")
-                            .font(.system(size: 11, weight: .black, design: .monospaced))
-                            .foregroundColor(.cyan)
-                        Spacer()
-                        Text("Click map to reposition pin")
-                            .font(.system(size: 9))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    // Place Search Bar
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.secondary)
-                        TextField("Search school, stadium, city, or landmark...", text: $searchPlaceText)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 11))
-                            .onSubmit {
-                                searchLocations()
-                            }
-                            .onChange(of: searchPlaceText) { _, newQuery in
-                                if newQuery.count >= 2 {
-                                    searchLocations()
-                                } else {
-                                    searchResults = []
+                // Left Column: Interactive Map with Search & Click-to-Pin
+                VStack(alignment: .leading, spacing: 12) {
+                    // Search Bar & City Shortcuts
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundColor(.cyan)
+                                TextField("Search any school, stadium, hospital, city (e.g. AIIMS Delhi, Patna Stadium)...", text: $searchPlaceText)
+                                    .textFieldStyle(.plain)
+                                    .font(.system(size: 12))
+                                    .onSubmit {
+                                        searchLocations()
+                                    }
+                                    .onChange(of: searchPlaceText) { _, newQuery in
+                                        if newQuery.count >= 2 {
+                                            searchLocations()
+                                        } else {
+                                            searchResults = []
+                                        }
+                                    }
+                                
+                                if isSearching {
+                                    ProgressView().controlSize(.mini)
+                                } else if !searchPlaceText.isEmpty {
+                                    Button {
+                                        searchPlaceText = ""
+                                        searchResults = []
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
-                        
-                        if isSearching {
-                            ProgressView().controlSize(.mini)
-                        } else if !searchPlaceText.isEmpty {
+                            .padding(10)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.cyan.opacity(0.4), lineWidth: 1))
+                            
                             Button {
-                                searchPlaceText = ""
-                                searchResults = []
+                                searchLocations()
                             } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.secondary)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "location.magnifyingglass")
+                                    Text("Find")
+                                }
+                                .font(.system(size: 11, weight: .bold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.borderedProminent)
+                            .tint(.cyan)
                         }
-                    }
-                    .padding(8)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
-                    
-                    // Search Results Dropdown Overlay
-                    if !searchResults.isEmpty {
-                        ScrollView {
-                            VStack(spacing: 2) {
-                                ForEach(searchResults, id: \.self) { item in
+                        
+                        // Live Search Results Dropdown List
+                        if !searchResults.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("FOUND LOCATIONS (CLICK TO PIN):")
+                                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                                    .foregroundColor(.cyan)
+                                    .padding(.horizontal, 4)
+                                
+                                ScrollView {
+                                    VStack(spacing: 4) {
+                                        ForEach(searchResults, id: \.self) { item in
+                                            Button {
+                                                selectPlace(item)
+                                            } label: {
+                                                HStack(spacing: 10) {
+                                                    Image(systemName: "mappin.circle.fill")
+                                                        .foregroundColor(.green)
+                                                        .font(.system(size: 14))
+                                                    
+                                                    VStack(alignment: .leading, spacing: 1) {
+                                                        Text(item.name ?? "Place")
+                                                            .font(.system(size: 12, weight: .bold))
+                                                            .foregroundColor(.white)
+                                                        
+                                                        if let address = item.placemark.title {
+                                                            Text(address)
+                                                                .font(.system(size: 10))
+                                                                .foregroundColor(.secondary)
+                                                                .lineLimit(1)
+                                                        }
+                                                    }
+                                                    
+                                                    Spacer()
+                                                    
+                                                    Image(systemName: "arrow.right.circle")
+                                                        .foregroundColor(.cyan)
+                                                }
+                                                .padding(8)
+                                                .background(Color.white.opacity(0.06))
+                                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                                .frame(maxHeight: 140)
+                            }
+                            .padding(8)
+                            .background(Color.black.opacity(0.85))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.cyan.opacity(0.3), lineWidth: 1))
+                        }
+                        
+                        // Quick City Shortcuts Bar
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(quickCities, id: \.name) { city in
                                     Button {
-                                        let coord = item.placemark.coordinate
+                                        let coord = CLLocationCoordinate2D(latitude: city.lat, longitude: city.lon)
                                         selectedCoordinate = coord
                                         mapCameraPosition = .region(
                                             MKCoordinateRegion(
                                                 center: coord,
-                                                span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+                                                span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
                                             )
                                         )
-                                        if name.isEmpty || name.starts(with: "Relief Camp") {
-                                            name = "\(item.name ?? "Evacuation Hub") Relief Camp"
-                                        }
-                                        searchResults = []
+                                        reverseGeocodeLocation(coord)
                                     } label: {
-                                        HStack {
-                                            Image(systemName: "mappin.circle.fill")
-                                                .foregroundColor(.green)
-                                            VStack(alignment: .leading, spacing: 1) {
-                                                Text(item.name ?? "Place")
-                                                    .font(.system(size: 11, weight: .bold))
-                                                    .foregroundColor(.white)
-                                                if let address = item.placemark.title {
-                                                    Text(address)
-                                                        .font(.system(size: 9))
-                                                        .foregroundColor(.secondary)
-                                                        .lineLimit(1)
-                                                }
-                                            }
-                                            Spacer()
-                                        }
-                                        .padding(6)
-                                        .background(Color.white.opacity(0.05))
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        Text(city.name)
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(Capsule())
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
                         }
-                        .frame(maxHeight: 120)
-                        .padding(6)
-                        .background(Color.black.opacity(0.8))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     
-                    // Quick City Presets
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(quickCities, id: \.name) { city in
-                                Button {
-                                    let coord = CLLocationCoordinate2D(latitude: city.lat, longitude: city.lon)
-                                    selectedCoordinate = coord
-                                    mapCameraPosition = .region(
-                                        MKCoordinateRegion(
-                                            center: coord,
-                                            span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
-                                        )
-                                    )
-                                } label: {
-                                    Text(city.name)
-                                        .font(.system(size: 9, weight: .medium))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.08))
-                                        .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    
-                    // MapKit Canvas with Pin Marker & Tap Handler
+                    // Full Interactive Map Canvas
                     ZStack {
                         MapReader { reader in
                             Map(position: $mapCameraPosition) {
-                                Annotation("Selected Relief Shelter Location", coordinate: selectedCoordinate) {
+                                Annotation("Relief Shelter Location", coordinate: selectedCoordinate) {
                                     VStack(spacing: 2) {
                                         ZStack {
                                             Circle()
                                                 .fill(Color.green)
-                                                .frame(width: 32, height: 32)
-                                                .shadow(color: .green.opacity(0.6), radius: 8)
+                                                .frame(width: 38, height: 38)
+                                                .shadow(color: .green.opacity(0.8), radius: 10)
                                             Image(systemName: "tent.fill")
-                                                .font(.system(size: 14, weight: .bold))
+                                                .font(.system(size: 16, weight: .bold))
                                                 .foregroundColor(.white)
                                         }
                                         
-                                        Text(name.isEmpty ? "New Shelter" : name)
-                                            .font(.system(size: 8, weight: .bold))
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
+                                        Text(name.isEmpty ? "Selected Camp" : name)
+                                            .font(.system(size: 10, weight: .bold))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
                                             .background(.ultraThinMaterial)
                                             .clipShape(Capsule())
                                     }
@@ -727,19 +773,39 @@ public struct AddOrEditReliefCampModalView: View {
                             .onTapGesture { screenPoint in
                                 if let coord = reader.convert(screenPoint, from: .local) {
                                     selectedCoordinate = coord
+                                    reverseGeocodeLocation(coord)
                                 }
                             }
                         }
                         
-                        // Overlay Coordinates HUD Box
+                        // Overlay Coordinates & Click-to-Pin Instructions HUD Box
                         VStack {
+                            HStack {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "hand.tap.fill")
+                                        .foregroundColor(.cyan)
+                                    Text("CLICK ANYWHERE ON MAP TO PIN LOCATION")
+                                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                                        .foregroundColor(.cyan)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.4), lineWidth: 1))
+                                
+                                Spacer()
+                            }
+                            .padding(12)
+                            
                             Spacer()
+                            
                             HStack {
                                 HStack(spacing: 6) {
                                     Image(systemName: "location.fill")
                                         .foregroundColor(.green)
-                                    Text("LAT: \(String(format: "%.5f", selectedCoordinate.latitude)) • LON: \(String(format: "%.5f", selectedCoordinate.longitude))")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    Text("GPS: \(String(format: "%.5f", selectedCoordinate.latitude))°N, \(String(format: "%.5f", selectedCoordinate.longitude))°E")
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                                         .foregroundColor(.white)
                                 }
                                 .padding(.horizontal, 10)
@@ -750,41 +816,52 @@ public struct AddOrEditReliefCampModalView: View {
                                 
                                 Spacer()
                             }
-                            .padding(10)
+                            .padding(12)
                         }
                     }
-                    .frame(height: 320)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
                 }
                 .padding(16)
-                .frame(width: 440)
+                .frame(maxWidth: .infinity)
                 
                 Divider()
                 
-                // Right Column: Form Details & Resource Toggles
+                // Right Column: Form Profile Parameters & Broadcast Action
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("CAMP PROFILE & RESOURCES")
+                        Text("CAMP PROFILE & LOGISTICS")
                             .font(.system(size: 11, weight: .black, design: .monospaced))
                             .foregroundColor(.secondary)
                         
-                        // Camp Name
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Relief Camp / Facility Name")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.secondary)
+                        // Camp Facility Name Box (Auto-Populated from Map Click!)
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Relief Camp / Facility Name")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                HStack(spacing: 3) {
+                                    Circle().fill(Color.cyan).frame(width: 4, height: 4)
+                                    Text("Auto-populated from map")
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.cyan)
+                                }
+                            }
                             
-                            TextField("e.g. KV School Relief Hub Sector 4", text: $name)
+                            TextField("Facility name auto-populates on map click...", text: $name)
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 12, weight: .semibold))
-                                .padding(8)
+                                .font(.system(size: 13, weight: .bold))
+                                .padding(10)
                                 .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.cyan.opacity(0.4), lineWidth: 1))
                         }
                         
-                        // Capacity & Initial Occupancy Grid
+                        // Bed Capacity & Current Intake Box
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Total Bed Capacity")
@@ -793,29 +870,29 @@ public struct AddOrEditReliefCampModalView: View {
                                 
                                 TextField("500", text: $capacityString)
                                     .textFieldStyle(.plain)
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    .padding(8)
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    .padding(10)
                                     .background(Color.white.opacity(0.06))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
                             }
                             
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Current Intake / Occupancy")
+                                Text("Initial Intake / Occupancy")
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundColor(.secondary)
                                 
                                 TextField("0", text: $occupancyString)
                                     .textFieldStyle(.plain)
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    .padding(8)
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    .padding(10)
                                     .background(Color.white.opacity(0.06))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
                             }
                         }
                         
-                        // Supplies & Medical Status
+                        // Supplies & Medical Aid Status
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Supplies, Food & Medical Status")
                                 .font(.system(size: 10, weight: .bold))
@@ -824,30 +901,30 @@ public struct AddOrEditReliefCampModalView: View {
                             TextField("Ample Food, Drinking Water, Medical Aid & Solar Power", text: $suppliesStatus)
                                 .textFieldStyle(.plain)
                                 .font(.system(size: 11))
-                                .padding(8)
+                                .padding(10)
                                 .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         
-                        // Contact Phone & Incharge
+                        // Contact Phone / Disaster Helpline
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Disaster Helpline / Contact Phone")
+                            Text("Disaster Helpline / Incharge Contact")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(.secondary)
                             
-                            TextField("1078 (Disaster Helpline) / Officer Sharma", text: $contactPhone)
+                            TextField("1078 (Disaster Helpline) / Officer In-Charge", text: $contactPhone)
                                 .textFieldStyle(.plain)
                                 .font(.system(size: 11, design: .monospaced))
-                                .padding(8)
+                                .padding(10)
                                 .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         
-                        // Quick Presets for Supplies
+                        // Quick Presets Box
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("QUICK RESOURCE TEMPLATES")
+                            Text("QUICK RESOURCE PRESETS")
                                 .font(.system(size: 9, weight: .black, design: .monospaced))
                                 .foregroundColor(.secondary)
                             
@@ -856,44 +933,64 @@ public struct AddOrEditReliefCampModalView: View {
                                     suppliesStatus = "Ample Food, Potable Water, Doctor On-Duty & Generator Backup"
                                 }
                                 .font(.system(size: 9))
-                                .padding(4)
+                                .padding(5)
                                 .background(Color.green.opacity(0.15))
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
                                 
-                                Button("Ration Urgent") {
+                                Button("Ration Needed") {
                                     suppliesStatus = "Shelter Open • Food Ration Resupply Requested"
                                 }
                                 .font(.system(size: 9))
-                                .padding(4)
+                                .padding(5)
                                 .background(Color.orange.opacity(0.15))
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
                             }
                         }
                         
-                        Spacer().frame(height: 10)
+                        Divider().padding(.vertical, 4)
                         
-                        // Save Button
+                        // Broadcast Alert Preview Banner
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                                    .foregroundColor(.green)
+                                Text("INSTANT CITIZEN APP BROADCAST")
+                                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                                    .foregroundColor(.green)
+                            }
+                            
+                            Text("Saving will immediately upload to Firebase Firestore & broadcast an emergency notification to all citizens within 15km of this shelter.")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                                .lineSpacing(2)
+                        }
+                        .padding(10)
+                        .background(Color.green.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.green.opacity(0.25), lineWidth: 1))
+                        
+                        // Save & Broadcast Button
                         Button {
                             saveCamp()
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                 Text(initialShelter == nil ? "Save & Broadcast to Citizens" : "Update Relief Camp")
                             }
                             .font(.system(size: 13, weight: .bold))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
+                            .padding(.vertical, 12)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    .padding(16)
+                    .padding(20)
                 }
-                .frame(width: 360)
+                .frame(width: 380)
+                .background(Color(NSColor.windowBackgroundColor))
             }
         }
-        .frame(width: 820, height: 500)
         .onAppear {
             if let shelter = initialShelter {
                 name = shelter.name
@@ -908,6 +1005,9 @@ public struct AddOrEditReliefCampModalView: View {
                         span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
                     )
                 )
+            } else {
+                // Auto-reverse geocode initial location so real place name appears immediately
+                reverseGeocodeLocation(selectedCoordinate)
             }
         }
     }
@@ -918,16 +1018,56 @@ public struct AddOrEditReliefCampModalView: View {
         
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = searchPlaceText
+        request.resultTypes = [.pointOfInterest, .address]
         request.region = MKCoordinateRegion(
-            center: selectedCoordinate,
-            span: MKCoordinateSpan(latitudeDelta: 2.0, longitudeDelta: 2.0)
+            center: CLLocationCoordinate2D(latitude: 20.5937, longitude: 78.9629),
+            span: MKCoordinateSpan(latitudeDelta: 28.0, longitudeDelta: 28.0)
         )
         
         let search = MKLocalSearch(request: request)
         search.start { response, error in
-            isSearching = false
-            if let response = response {
-                searchResults = Array(response.mapItems.prefix(5))
+            DispatchQueue.main.async {
+                self.isSearching = false
+                if let response = response {
+                    self.searchResults = Array(response.mapItems.prefix(6))
+                }
+            }
+        }
+    }
+    
+    private func selectPlace(_ item: MKMapItem) {
+        let coord = item.placemark.coordinate
+        selectedCoordinate = coord
+        mapCameraPosition = .region(
+            MKCoordinateRegion(
+                center: coord,
+                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+            )
+        )
+        
+        let placeName = item.name ?? "Evacuation Hub"
+        let city = item.placemark.locality ?? item.placemark.administrativeArea ?? ""
+        if !city.isEmpty && !placeName.contains(city) {
+            self.name = "\(placeName) Relief Hub (\(city))"
+        } else {
+            self.name = "\(placeName) Relief Hub"
+        }
+        searchResults = []
+        searchPlaceText = item.name ?? ""
+    }
+    
+    private func reverseGeocodeLocation(_ coord: CLLocationCoordinate2D) {
+        let loc = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+        CLGeocoder().reverseGeocodeLocation(loc) { placemarks, error in
+            guard let pm = placemarks?.first, error == nil else { return }
+            DispatchQueue.main.async {
+                let placeName = pm.name ?? pm.subLocality ?? pm.locality ?? "Evacuation Hub"
+                let city = pm.locality ?? pm.subAdministrativeArea ?? pm.administrativeArea ?? ""
+                if !city.isEmpty && !placeName.contains(city) {
+                    self.name = "\(placeName) Relief Hub (\(city))"
+                } else {
+                    self.name = "\(placeName) Relief Hub"
+                }
             }
         }
     }
@@ -952,6 +1092,6 @@ public struct AddOrEditReliefCampModalView: View {
             store.addReliefShelter(finalShelter)
         }
         
-        dismiss()
+        onClose()
     }
 }
