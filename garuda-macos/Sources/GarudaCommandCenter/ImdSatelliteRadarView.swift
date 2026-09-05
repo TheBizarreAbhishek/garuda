@@ -188,94 +188,16 @@ public struct ImdSatelliteRadarView: View {
             
             // 2. Main Content Split: Left Satellite Viewer + Right Channel Selector
             HStack(spacing: 0) {
-                // Left: High-Res Imagery Canvas
+                // Left: High-Res Imagery Canvas (Full Box Utilization & Trackpad Navigation)
                 VStack(spacing: 0) {
                     ZStack {
                         Color.black
                         
-                        AsyncImage(url: currentChannel.url) { phase in
-                            switch phase {
-                            case .empty:
-                                VStack(spacing: 12) {
-                                    ProgressView()
-                                        .controlSize(.large)
-                                        .tint(.cyan)
-                                    Text("Establishing downlink stream with INSAT-3DS Ground Station...")
-                                        .font(.system(size: 12, design: .monospaced))
-                                        .foregroundColor(.secondary)
-                                }
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .scaleEffect(scale)
-                                    .offset(offset)
-                                    .gesture(
-                                        SimultaneousGesture(
-                                            MagnificationGesture()
-                                                .onChanged { delta in
-                                                    let newScale = lastScale * delta
-                                                    scale = min(max(newScale, 0.7), 4.5)
-                                                }
-                                                .onEnded { _ in
-                                                    lastScale = scale
-                                                    if scale <= 1.0 {
-                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                                            offset = .zero
-                                                            lastOffset = .zero
-                                                        }
-                                                    }
-                                                },
-                                            DragGesture()
-                                                .onChanged { val in
-                                                    if scale > 1.0 {
-                                                        offset = CGSize(
-                                                            width: lastOffset.width + val.translation.width,
-                                                            height: lastOffset.height + val.translation.height
-                                                        )
-                                                    }
-                                                }
-                                                .onEnded { _ in
-                                                    if scale <= 1.0 {
-                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                                            offset = .zero
-                                                            lastOffset = .zero
-                                                        }
-                                                    } else {
-                                                        lastOffset = offset
-                                                    }
-                                                }
-                                        )
-                                    )
-                                    .onTapGesture(count: 2) {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                            if scale > 1.2 {
-                                                scale = 1.0
-                                                lastScale = 1.0
-                                                offset = .zero
-                                                lastOffset = .zero
-                                            } else {
-                                                scale = 2.2
-                                                lastScale = 2.2
-                                            }
-                                        }
-                                    }
-                            case .failure(let error):
-                                VStack(spacing: 10) {
-                                    Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.orange)
-                                    Text("Satellite Imagery Gateway Offline")
-                                        .font(.headline.bold())
-                                        .foregroundColor(.white)
-                                    Text(error.localizedDescription)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
+                        NativeSatelliteCanvasView(
+                            url: currentChannel.url,
+                            currentScale: $scale,
+                            refreshTrigger: lastRefreshed
+                        )
                         .clipped()
                         
                         // Overlay HUD Badges (Top Left & Top Right)
@@ -297,52 +219,61 @@ public struct ImdSatelliteRadarView: View {
                                 
                                 Spacer()
                                 
-                                // Interactive Zoom Controller Bar
-                                HStack(spacing: 6) {
+                                // Interactive Zoom & Navigation Controller Bar
+                                HStack(spacing: 8) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "hand.draw")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.cyan)
+                                        Text("2-Finger Pan / Pinch")
+                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(Color.black.opacity(0.4))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    
+                                    Divider().frame(height: 14)
+                                    
                                     Button {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                            scale = max(0.7, scale - 0.35)
-                                            lastScale = scale
-                                            if scale <= 1.0 {
-                                                offset = .zero
-                                                lastOffset = .zero
-                                            }
-                                        }
+                                        scale = max(0.5, scale - 0.35)
                                     } label: {
                                         Image(systemName: "minus.magnifyingglass")
                                     }
                                     .buttonStyle(.plain)
                                     
                                     Button {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                            scale = 1.0
-                                            lastScale = 1.0
-                                            offset = .zero
-                                            lastOffset = .zero
-                                        }
+                                        scale = 1.0
                                     } label: {
                                         Text("\(Int(scale * 100))%")
-                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                                             .foregroundColor(.cyan)
                                     }
                                     .buttonStyle(.plain)
                                     
                                     Button {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                            scale = min(4.5, scale + 0.35)
-                                            lastScale = scale
-                                        }
+                                        scale = min(5.0, scale + 0.35)
                                     } label: {
                                         Image(systemName: "plus.magnifyingglass")
                                     }
                                     .buttonStyle(.plain)
+                                    
+                                    Button {
+                                        scale = 1.0
+                                    } label: {
+                                        Text("Fit")
+                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.white)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                                 .font(.system(size: 12, weight: .bold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
                                 .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
                             }
                             .padding(14)
                             
@@ -388,12 +319,7 @@ public struct ImdSatelliteRadarView: View {
                             ForEach(channels) { ch in
                                 Button {
                                     selectedChannelId = ch.id
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        scale = 1.0
-                                        lastScale = 1.0
-                                        offset = .zero
-                                        lastOffset = .zero
-                                    }
+                                    scale = 1.0
                                 } label: {
                                     HStack(spacing: 12) {
                                         ZStack {
@@ -473,3 +399,116 @@ public struct ImdSatelliteRadarView: View {
         }
     }
 }
+
+// MARK: - Native AppKit Pan & Zoom High-Performance Satellite Canvas
+public struct NativeSatelliteCanvasView: NSViewRepresentable {
+    let url: URL
+    @Binding var currentScale: CGFloat
+    let refreshTrigger: Date
+    
+    public func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    public func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.allowsMagnification = true
+        scrollView.minMagnification = 0.5
+        scrollView.maxMagnification = 6.0
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .black
+        scrollView.automaticallyAdjustsContentInsets = false
+        
+        let imageView = CenteredImageView()
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.animates = false
+        
+        scrollView.documentView = imageView
+        
+        // Listen to magnification changes to sync with HUD
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.magnificationDidChange(_:)),
+            name: NSScrollView.didEndLiveMagnifyNotification,
+            object: scrollView
+        )
+        
+        context.coordinator.scrollView = scrollView
+        context.coordinator.imageView = imageView
+        context.coordinator.loadImage(from: url)
+        
+        return scrollView
+    }
+    
+    public func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        if context.coordinator.currentUrl != url || context.coordinator.lastRefresh != refreshTrigger {
+            context.coordinator.currentUrl = url
+            context.coordinator.lastRefresh = refreshTrigger
+            context.coordinator.loadImage(from: url)
+        }
+        
+        // Programmatic zoom from HUD buttons
+        if abs(scrollView.magnification - currentScale) > 0.05 && currentScale >= 0.5 {
+            scrollView.setMagnification(currentScale, centeredAt: NSPoint(x: scrollView.bounds.midX, y: scrollView.bounds.midY))
+        }
+    }
+    
+    @MainActor
+    public class Coordinator: NSObject {
+        var parent: NativeSatelliteCanvasView
+        weak var scrollView: NSScrollView?
+        weak var imageView: CenteredImageView?
+        var currentUrl: URL?
+        var lastRefresh: Date = Date()
+        
+        init(_ parent: NativeSatelliteCanvasView) {
+            self.parent = parent
+        }
+        
+        @objc func magnificationDidChange(_ notification: Notification) {
+            guard let sv = scrollView else { return }
+            self.parent.currentScale = sv.magnification
+        }
+        
+        func loadImage(from url: URL) {
+            Task {
+                do {
+                    let (data, _) = try await URLSession.shared.data(from: url)
+                    if let image = NSImage(data: data) {
+                        self.imageView?.image = image
+                        if let sv = self.scrollView {
+                            let svSize = sv.bounds.size
+                            let imgSize = image.size
+                            if imgSize.width > 0 && imgSize.height > 0 {
+                                let widthRatio = svSize.width / imgSize.width
+                                let heightRatio = svSize.height / imgSize.height
+                                let fitRatio = max(widthRatio, heightRatio)
+                                
+                                // Scale document view to fill container box
+                                self.imageView?.frame = NSRect(
+                                    x: 0,
+                                    y: 0,
+                                    width: max(svSize.width, imgSize.width * fitRatio),
+                                    height: max(svSize.height, imgSize.height * fitRatio)
+                                )
+                            }
+                        }
+                    }
+                } catch {
+                    // Silently ignore network retry
+                }
+            }
+        }
+    }
+}
+
+public class CenteredImageView: NSImageView {
+    public override func scrollWheel(with event: NSEvent) {
+        // Forward scroll wheel directly to parent NSScrollView for buttery-smooth 2-finger panning
+        self.enclosingScrollView?.scrollWheel(with: event)
+    }
+}
+
