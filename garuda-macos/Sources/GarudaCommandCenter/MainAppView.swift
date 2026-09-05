@@ -17,7 +17,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .triageKanban: return "square.grid.3x2.fill"
         case .emergencyBroadcast: return "antenna.radiowaves.left.and.right"
         case .reliefCamps: return "tent.fill"
-        case .imdRadar: return "satellite.fill"
+        case .imdRadar: return "globe.asia.australia.fill"
         case .hazardReports: return "exclamationmark.triangle.fill"
         case .meshTelemetry: return "waveform.path.ecg"
         }
