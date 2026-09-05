@@ -158,40 +158,8 @@ fun StandbyScreen(
                         lineHeight = 18.sp
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onSimulateGovAlert,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Simulate Gov Push",
-                                fontSize = 12.sp,
-                                color = AmberAlert
-                            )
-                        }
-
-                        Button(
-                            onClick = onEnterEmergencyMode,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = EmergencyBloodRed,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Test SOS Mode",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
                 }
             }
         }
