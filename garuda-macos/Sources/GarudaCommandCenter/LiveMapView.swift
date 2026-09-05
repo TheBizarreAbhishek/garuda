@@ -4,12 +4,13 @@ import MapKit
 public struct LiveMapView: View {
     @ObservedObject var store: CommandCenterStore
     
-    @State private var position: MapCameraPosition = .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 20.5937, longitude: 78.9629),
-            span: MKCoordinateSpan(latitudeDelta: 22.0, longitudeDelta: 22.0)
-        )
+    // Default Pan-India 3D view calibrated for Indian subcontinent
+    private static let panIndiaRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 21.8, longitude: 79.2),
+        span: MKCoordinateSpan(latitudeDelta: 16.0, longitudeDelta: 16.0)
     )
+    
+    @State private var position: MapCameraPosition = .region(LiveMapView.panIndiaRegion)
     
     // UI HUD Controls
     @State private var showShelters: Bool = true
@@ -126,11 +127,37 @@ public struct LiveMapView: View {
                 MapPitchToggle()
             }
             
-            // 2. Top Unified Slim Floating Control Bar (Non-Intrusive)
-            HStack(spacing: 12) {
+            // 2. Top Unified Frosted Glass Command Bar
+            HStack(spacing: 14) {
+                // Garuda GIS Brand Header with Pulse Beacon
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(store.isEmergencyBroadcastActive ? Color.red : Color.green)
+                            .frame(width: 8, height: 8)
+                        Circle()
+                            .stroke((store.isEmergencyBroadcastActive ? Color.red : Color.green).opacity(0.4), lineWidth: 4)
+                            .frame(width: 14, height: 14)
+                    }
+                    
+                    Text("GARUDA GIS")
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Text(store.isEmergencyBroadcastActive ? "EMERGENCY" : "ACTIVE")
+                        .font(.system(size: 9, weight: .heavy))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(store.isEmergencyBroadcastActive ? Color.red.opacity(0.9) : Color.blue.opacity(0.8))
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
+                
+                Divider().frame(height: 18)
+                
                 // Layer Selector Menu Button
                 Menu {
-                    Section("Indian Satellite & GIS Providers") {
+                    Section("Satellite & GIS Mode") {
                         ForEach(SatelliteMapLayerMode.allCases) { mode in
                             Button {
                                 store.satelliteMapMode = mode
@@ -148,7 +175,7 @@ public struct LiveMapView: View {
                     
                     Divider()
                     
-                    Section("Map Display Layers") {
+                    Section("Map Display Overlays") {
                         Toggle("BLE Mesh Relay Lines", isOn: $showMeshHops)
                         Toggle("NDRF Rescue Teams", isOn: $showNdrfUnits)
                         Toggle("Relief Shelters", isOn: $showShelters)
@@ -158,105 +185,74 @@ public struct LiveMapView: View {
                         Image(systemName: "square.3.layers.3d.fill")
                             .foregroundColor(.cyan)
                         Text(store.satelliteMapMode.rawValue)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                         Image(systemName: "chevron.down")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.ultraThickMaterial)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .menuStyle(.borderlessButton)
                 
-                // Metrics Capsule
-                HStack(spacing: 10) {
+                Divider().frame(height: 18)
+                
+                // Live Operational Metrics
+                HStack(spacing: 12) {
                     MetricDot(count: store.totalActiveSignals, label: "SOS", color: .red)
-                    Text("•").foregroundColor(.secondary).font(.caption2)
                     MetricDot(count: store.criticalCount, label: "Critical", color: .orange)
-                    Text("•").foregroundColor(.secondary).font(.caption2)
                     MetricDot(count: store.ndrfUnits.count, label: "NDRF", color: .blue)
-                    Text("•").foregroundColor(.secondary).font(.caption2)
                     MetricDot(count: store.shelters.count, label: "Camps", color: .green)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.ultraThickMaterial)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
                 
                 Spacer()
                 
                 // Quick Camera Jump Buttons
                 HStack(spacing: 6) {
                     Button {
-                        withAnimation(.easeInOut(duration: 1.2)) {
-                            position = .region(
-                                MKCoordinateRegion(
-                                    center: CLLocationCoordinate2D(latitude: 22.5937, longitude: 78.9629),
-                                    span: MKCoordinateSpan(latitudeDelta: 22.0, longitudeDelta: 22.0)
-                                )
-                            )
-                        }
-                    } label: {
-                        Text("🇮🇳 Pan-India")
-                            .font(.system(size: 11, weight: .semibold))
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
-                            .background(.ultraThickMaterial)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button {
                         withAnimation(.easeInOut(duration: 1.0)) {
-                            if let firstSignal = store.signals.first {
-                                position = .region(
-                                    MKCoordinateRegion(
-                                        center: firstSignal.coordinate,
-                                        span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
-                                    )
-                                )
-                            }
+                            position = .region(LiveMapView.panIndiaRegion)
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Circle().fill(Color.red).frame(width: 6, height: 6)
-                            Text("Victims")
+                            Text("🇮🇳")
+                            Text("Pan-India")
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(.ultraThickMaterial)
-                        .clipShape(Capsule())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
                     
-                    Button {
-                        withAnimation(.easeInOut(duration: 1.0)) {
-                            if let firstShelter = store.shelters.first {
-                                position = .region(
-                                    MKCoordinateRegion(
-                                        center: firstShelter.coordinate,
-                                        span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                    if !store.signals.isEmpty {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.8)) {
+                                if let firstSignal = store.signals.first {
+                                    position = .region(
+                                        MKCoordinateRegion(
+                                            center: firstSignal.coordinate,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                                        )
                                     )
-                                )
+                                }
                             }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.red).frame(width: 6, height: 6)
+                                Text("Victims (\(store.signals.count))")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.red.opacity(0.2))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.green).frame(width: 6, height: 6)
-                            Text("Camps")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(.ultraThickMaterial)
-                        .clipShape(Capsule())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                     
                     Button {
                         withAnimation(.spring()) {
@@ -270,17 +266,59 @@ public struct LiveMapView: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.cyan)
                         }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Color.cyan.opacity(0.2))
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(Color.cyan.opacity(0.4), lineWidth: 1))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.cyan.opacity(0.18))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.35), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 12)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.35), radius: 12, x: 0, y: 6)
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            
+            // 3. Standby HUD Badge (Shown when 0 signals)
+            if store.signals.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 7, height: 7)
+                        Text("ALL SECTORS STANDBY")
+                            .font(.system(size: 11, weight: .black, design: .monospaced))
+                            .foregroundColor(.green)
+                    }
+                    Text("Pan-India Ground BLE Mesh & Satellite Gateway Active")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 10) {
+                        Label("Port :\(store.serverPort) SSE", systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(.cyan)
+                        Label("Cloud Firestore Live", systemImage: "icloud.fill")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(.purple)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.leading, 16)
+                .padding(.bottom, 20)
+            }
             
             // 3. Right-Side Inspector Drawer
             if let selected = store.selectedSignal {
