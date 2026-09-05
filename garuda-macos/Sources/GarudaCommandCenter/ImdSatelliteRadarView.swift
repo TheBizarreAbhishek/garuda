@@ -441,14 +441,16 @@ public struct ImdSatelliteRadarView: View {
                 
                 // Right Side: Inspector, Channel Selector & Synoptic Meteorological Telemetry
                 VStack(spacing: 0) {
-                    // Segmented Inspector Picker
+                    // Segmented Inspector Picker (labelsHidden prevents squished side label)
                     Picker("Inspector View", selection: $selectedInspectorTab) {
                         ForEach(InspectorTab.allCases, id: \.self) { tab in
                             Text(tab.rawValue).tag(tab)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .padding(12)
+                    .labelsHidden()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
                     
                     Divider()
                     
@@ -470,19 +472,78 @@ public struct ImdSatelliteRadarView: View {
                     
                     Divider()
                     
-                    // External IMD Direct Portal Stream Link
-                    Link(destination: currentChannel.url) {
-                        HStack {
-                            Image(systemName: "arrow.up.right.square")
-                            Text("Open Full-Res Stream on IMD Portal")
+                    // Active Satellite Source & Downlink Telemetry Card
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "satellite.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.cyan)
+                            Text("DATA SOURCE SATELLITE")
+                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            HStack(spacing: 3) {
+                                Circle().fill(Color.green).frame(width: 5, height: 5)
+                                Text("ACTIVE ORBIT")
+                                    .font(.system(size: 7, weight: .black, design: .monospaced))
+                                    .foregroundColor(.green)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.12))
+                            .clipShape(Capsule())
                         }
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("ISRO INSAT-3DS")
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.white)
+                                Text("India Meteorological & Climate Sounder")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("74.0°E GEO")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.cyan)
+                                Text("Downlink: 2.2 GHz")
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Divider().opacity(0.4)
+                        
+                        HStack(spacing: 12) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "building.columns.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.orange)
+                                Text("IMD Mausam Bhavan")
+                                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.green)
+                                Text("MCF Hassan Gateway")
+                                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(10)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
                     .padding(12)
                 }
                 .frame(width: 360)
