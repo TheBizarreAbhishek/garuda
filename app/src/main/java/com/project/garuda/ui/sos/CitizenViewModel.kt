@@ -81,21 +81,55 @@ class CitizenViewModel(
     private fun observeFirebaseGovernmentAlerts() {
         viewModelScope.launch {
             firebaseGateway.syncState.collect { syncState ->
-                if (syncState.isEmergencyActive && _uiState.value.mode == DisasterMode.STANDBY && !_uiState.value.isGovernmentAlertDialogOpen) {
-                    _uiState.update {
-                        it.copy(
-                            pendingGovAlert = GovernmentAlert(
-                                headline = syncState.alertHeadline,
-                                region = syncState.alertDistrict,
-                                instructions = syncState.alertInstructions,
-                                timestampFormatted = "Live from Command Grid"
-                            ),
-                            isGovernmentAlertDialogOpen = true
-                        )
+                if (syncState.isEmergencyActive) {
+                    val currentLoc = firebaseGateway.hardwareManager?.locationFlow?.value?.locationName ?: ""
+                    val targetZone = syncState.alertDistrict
+                    val isApplicable = isGeofenceMatch(currentLoc, targetZone)
+
+                    if (isApplicable) {
+                        Log.i(TAG, "🚨 Geofence MATCH! Alert targeting '$targetZone' applies to current location '$currentLoc'")
+                        if (_uiState.value.mode == DisasterMode.STANDBY && !_uiState.value.isGovernmentAlertDialogOpen) {
+                            _uiState.update {
+                                it.copy(
+                                    pendingGovAlert = GovernmentAlert(
+                                        headline = syncState.alertHeadline,
+                                        region = syncState.alertDistrict,
+                                        instructions = syncState.alertInstructions,
+                                        timestampFormatted = "Live from Command Grid"
+                                    ),
+                                    isGovernmentAlertDialogOpen = true
+                                )
+                            }
+                        }
+                    } else {
+                        Log.v(TAG, "ℹ️ Alert for '$targetZone' does not match device location '$currentLoc'. Remaining in Standby.")
                     }
+                } else if (!syncState.isEmergencyActive && _uiState.value.isGovernmentAlertDialogOpen) {
+                    _uiState.update { it.copy(isGovernmentAlertDialogOpen = false) }
                 }
             }
         }
+    }
+
+    private fun isGeofenceMatch(deviceLocation: String, targetGeofence: String): Boolean {
+        if (targetGeofence.isEmpty() || targetGeofence.contains("All", ignoreCase = true) || targetGeofence.contains("National", ignoreCase = true) || targetGeofence.contains("Pan-India", ignoreCase = true)) {
+            return true
+        }
+        if (deviceLocation.isEmpty() || deviceLocation.contains("Detecting", ignoreCase = true)) {
+            return true // Fallback to safe alert if GPS is still warming up
+        }
+
+        val devClean = deviceLocation.lowercase()
+        val targetClean = targetGeofence.lowercase()
+
+        // Check substring containment
+        if (targetClean.contains(devClean) || devClean.contains(targetClean)) return true
+
+        // Check matching words (e.g. "Uttar Pradesh", "Prayagraj", "Phaphamau", "Kerala", "Wayanad")
+        val devTokens = devClean.split(',', ' ', '/', '(', ')').filter { it.length > 3 }
+        val targetTokens = targetClean.split(',', ' ', '/', '(', ')').filter { it.length > 3 }
+
+        return devTokens.any { token -> targetTokens.contains(token) }
     }
 
     private fun observeMeshTelemetry() {

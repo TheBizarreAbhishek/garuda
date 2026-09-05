@@ -24,6 +24,7 @@ public struct MainAppView: View {
     @StateObject private var store = CommandCenterStore()
     @State private var selectedTab: NavigationTab = .liveMap
     @State private var isShowingDevicesModal: Bool = false
+    @State private var isShowingEmergencyModal: Bool = false
     
     public init() {}
     
@@ -89,9 +90,9 @@ public struct MainAppView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                     .background(Color.black.opacity(0.25))
-                    .cornerRadius(8)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(store.activeDevices.isEmpty ? Color.orange.opacity(0.3) : Color.green.opacity(0.3), lineWidth: 1)
                     )
                 }
@@ -112,21 +113,6 @@ public struct MainAppView: View {
                     HazardGalleryView(store: store)
                 case .meshTelemetry:
                     MeshTelemetryView(store: store)
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        store.toggleSimulation()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: store.isSimulatingMeshArrivals ? "dot.radiowaves.left.and.right" : "play.fill")
-                                .foregroundColor(store.isSimulatingMeshArrivals ? .green : .secondary)
-                            Text(store.isSimulatingMeshArrivals ? "Simulating Mesh..." : "Demo Simulation")
-                                .font(.caption.bold())
-                        }
-                    }
-                    .help("Simulate incoming multi-hop BLE mesh SOS packets for live demo")
                 }
             }
         }

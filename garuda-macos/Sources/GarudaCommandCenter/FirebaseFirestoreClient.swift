@@ -57,12 +57,14 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         request.httpMethod = "GET"
         request.timeoutInterval = 4.0
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard let data = data, error == nil else { return }
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, let data = data, error == nil else { return }
             
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let documents = json["documents"] as? [[String: Any]] {
                 var devices: [ConnectedDevice] = []
+                let now = Date().timeIntervalSince1970
+                
                 for doc in documents {
                     guard let fields = doc["fields"] as? [String: Any],
                           let name = doc["name"] as? String else { continue }
@@ -75,20 +77,29 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                     let loc = (fields["location"] as? [String: Any])?["stringValue"] as? String ?? "GPS Locating..."
                     let lat = (fields["latitude"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0
                     let lon = (fields["longitude"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0
+                    let lastSeenEpoch = Double((fields["lastSeen"] as? [String: Any])?["integerValue"] as? String ?? "0") ?? 0
                     
-                    let dev = ConnectedDevice(
-                        id: docId,
-                        name: devName,
-                        batteryLevel: battery,
-                        status: status,
-                        meshRole: role,
-                        location: loc,
-                        latitude: lat,
-                        longitude: lon,
-                        lastSeen: Date(),
-                        isOnline: true
-                    )
-                    devices.append(dev)
+                    let timeSinceLastHeartbeat = now - lastSeenEpoch
+                    
+                    // REAL-TIME HEARTBEAT TTL: Only devices active within the last 10 seconds are online!
+                    if timeSinceLastHeartbeat <= 10.0 {
+                        let dev = ConnectedDevice(
+                            id: docId,
+                            name: devName,
+                            batteryLevel: battery,
+                            status: status,
+                            meshRole: role,
+                            location: loc,
+                            latitude: lat,
+                            longitude: lon,
+                            lastSeen: Date(timeIntervalSince1970: lastSeenEpoch),
+                            isOnline: true
+                        )
+                        devices.append(dev)
+                    } else {
+                        // Node is DEAD/UNINSTALLED/CLOSED. Auto-purge dead node from Firestore
+                        self.purgeDeadDeviceFromCloud(deviceId: docId)
+                    }
                 }
                 
                 DispatchQueue.main.async {
@@ -96,6 +107,13 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                 }
             }
         }.resume()
+    }
+    
+    private func purgeDeadDeviceFromCloud(deviceId: String) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/active_nodes/\(deviceId)?key=\(apiKey)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        URLSession.shared.dataTask(with: request).resume()
     }
     
     // MARK: - Fetch SOS Signals from Firestore
@@ -243,6 +261,31 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                 print("[FirebaseClient] Emergency activation successfully written to Firestore!")
             }
         }.resume()
+    }
+    
+    // MARK: - Deactivate Emergency on Firestore
+    public func deactivateEmergencyOnCloud() {
+        guard let url = URL(string: "\(firestoreBaseUrl)/alerts/current_status?key=\(apiKey)") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "fields": [
+                "title": ["stringValue": "Standby / Normal Mode"],
+                "severity": ["stringValue": "All Clear"],
+                "targetDistrict": ["stringValue": "All Regions"],
+                "instructions": ["stringValue": "No active disaster emergency. System in standby monitoring."],
+                "isEmergencyActive": ["booleanValue": false],
+                "timestamp": ["integerValue": "\(Int(Date().timeIntervalSince1970))"]
+            ]
+        ]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
+        request.httpBody = jsonData
+        
+        URLSession.shared.dataTask(with: request).resume()
     }
     
     // MARK: - Update Signal Status on Firestore

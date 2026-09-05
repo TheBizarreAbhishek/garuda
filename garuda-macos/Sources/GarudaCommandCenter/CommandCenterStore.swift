@@ -8,6 +8,7 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     @Published public var alerts: [DisasterAlert] = []
     @Published public var hazards: [HazardReport] = []
     @Published public var activeDevices: [ConnectedDevice] = []
+    @Published public var notifications: [PushNotificationRecord] = []
     @Published public var selectedSignal: SosSignal?
     @Published public var isEmergencyBroadcastActive: Bool = true
     @Published public var activeDistrict: String = "Wayanad / Kerala Region"
@@ -56,7 +57,7 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
             guard let self = self else { return }
             withAnimation(.easeInOut) {
                 self.activeDevices = devices
-                self.connectedClientsCount = max(self.connectedClientsCount, devices.count)
+                self.connectedClientsCount = devices.count
             }
         }
     }
@@ -140,7 +141,12 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
             instructions: instructions,
             isEmergencyActive: true
         )
-        alerts.insert(newAlert, at: 0)
+        // If alert for same district exists, update it, else insert
+        if let existingIdx = alerts.firstIndex(where: { $0.targetDistrict.lowercased() == district.lowercased() }) {
+            alerts[existingIdx] = newAlert
+        } else {
+            alerts.insert(newAlert, at: 0)
+        }
         isEmergencyBroadcastActive = true
         activeDistrict = district
         
@@ -155,6 +161,69 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                 "severity": severity,
                 "district": district,
                 "instructions": instructions,
+                "timestamp": Date().timeIntervalSince1970
+            ]
+        )
+    }
+    
+    public func broadcastEmergencyDeactivation() {
+        isEmergencyBroadcastActive = false
+        activeDistrict = "All Regions (Standby)"
+        for i in 0..<alerts.count {
+            alerts[i].isEmergencyActive = false
+        }
+        
+        // 1. Publish Standby / Deactivation to Firebase Firestore in Cloud
+        FirebaseFirestoreClient.shared.deactivateEmergencyOnCloud()
+        
+        // 2. Broadcast Deactivation to connected devices
+        CommandGridServer.shared.broadcastSseEvent(
+            event: "emergency_deactivated",
+            data: [
+                "status": "standby",
+                "timestamp": Date().timeIntervalSince1970
+            ]
+        )
+    }
+    
+    public func deactivateSpecificAlert(id: String) {
+        if let idx = alerts.firstIndex(where: { $0.id == id }) {
+            alerts[idx].isEmergencyActive = false
+        }
+        let activeCount = alerts.filter { $0.isEmergencyActive }.count
+        if activeCount == 0 {
+            isEmergencyBroadcastActive = false
+            activeDistrict = "All Regions (Standby)"
+            FirebaseFirestoreClient.shared.deactivateEmergencyOnCloud()
+        }
+    }
+    
+    public func sendAreaPushNotification(
+        title: String,
+        message: String,
+        priority: String,
+        targetArea: String
+    ) {
+        let newNotif = PushNotificationRecord(
+            title: title,
+            message: message,
+            targetArea: targetArea,
+            priority: priority,
+            timestamp: Date(),
+            deliveredCount: max(1, activeDevices.count)
+        )
+        withAnimation(.spring()) {
+            notifications.insert(newNotif, at: 0)
+        }
+        
+        // 1. Broadcast SSE push event to all connected field Android nodes
+        CommandGridServer.shared.broadcastSseEvent(
+            event: "push_notification",
+            data: [
+                "title": title,
+                "message": message,
+                "priority": priority,
+                "targetArea": targetArea,
                 "timestamp": Date().timeIntervalSince1970
             ]
         )

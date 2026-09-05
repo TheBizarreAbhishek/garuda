@@ -222,3 +222,32 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable {
         self.isOnline = isOnline
     }
 }
+
+public struct PushNotificationRecord: Identifiable, Codable, Hashable {
+    public let id: String
+    public var title: String
+    public var message: String
+    public var targetArea: String
+    public var priority: String
+    public var timestamp: Date
+    public var deliveredCount: Int
+    
+    public init(
+        id: String = UUID().uuidString,
+        title: String,
+        message: String,
+        targetArea: String,
+        priority: String = "HIGH",
+        timestamp: Date = Date(),
+        deliveredCount: Int = 1
+    ) {
+        self.id = id
+        self.title = title
+        self.message = message
+        self.targetArea = targetArea
+        self.priority = priority
+        self.timestamp = timestamp
+        self.deliveredCount = deliveredCount
+    }
+}
+

@@ -13,10 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.project.garuda.notification.GarudaFirebaseMessagingService
 import com.project.garuda.ui.navigation.GarudaMainScreen
 import com.project.garuda.ui.sos.CitizenViewModel
 import com.project.garuda.ui.theme.AmoledBlack
 import com.project.garuda.ui.theme.GarudaTheme
+import com.project.garuda.util.BatteryOptimizationHelper
 
 class MainActivity : ComponentActivity() {
 
@@ -24,7 +26,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // 1. Initialize notification channels for Emergency siren and Push notifications
+        GarudaFirebaseMessagingService.createNotificationChannels(this)
+
+        // 2. Request BLE and Notification runtime permissions
         requestBlePermissions()
+
+        // 3. Request battery optimization whitelist so Android OS does not kill background BLE mesh relay
+        BatteryOptimizationHelper.requestIgnoreBatteryOptimization(this)
 
         setContent {
             val context = LocalContext.current
