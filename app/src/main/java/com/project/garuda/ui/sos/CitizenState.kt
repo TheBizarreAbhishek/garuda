@@ -65,10 +65,10 @@ sealed interface SosBroadcastState {
 
 data class MeshRelayStatus(
     val isMeshActive: Boolean = true,
-    val peersNearby: Int = 4,
-    val hopCount: Int = 2,
-    val packetsRelayed: Int = 18,
-    val lastSyncAgo: String = "12s ago",
+    val peersNearby: Int = 0,
+    val hopCount: Int = 0,
+    val packetsRelayed: Int = 0,
+    val lastSyncAgo: String = "Just now",
     val signalStrengthDbm: Int = -68
 )
 
