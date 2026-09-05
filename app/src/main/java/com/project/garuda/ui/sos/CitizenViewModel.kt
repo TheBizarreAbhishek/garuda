@@ -124,8 +124,9 @@ class CitizenViewModel(
                                         instructions = syncState.alertInstructions,
                                         timestampFormatted = "Live from Command Grid"
                                     ),
-                                    isGovernmentAlertDialogOpen = true
+                                    isGovernmentAlertDialogOpen = false
                                 )
+
                             }
                         }
                     } else {
@@ -162,17 +163,14 @@ class CitizenViewModel(
     private fun observeMeshTelemetry() {
         viewModelScope.launch {
             while (isActive) {
-                delay(4000)
-                if (_uiState.value.mode == DisasterMode.ACTIVE_EMERGENCY) {
-                    _uiState.update { current ->
-                        val newPeers = (current.meshStatus.peersNearby + ((-1..1).random())).coerceIn(2, 9)
-                        current.copy(
-                            meshStatus = current.meshStatus.copy(
-                                peersNearby = newPeers,
-                                lastSyncAgo = "Just now"
-                            )
+                delay(2000)
+                val activePeers = meshRelayEngine?.getActivePeerCount() ?: 0
+                _uiState.update { current ->
+                    current.copy(
+                        meshStatus = current.meshStatus.copy(
+                            peersNearby = activePeers
                         )
-                    }
+                    )
                 }
             }
         }
@@ -199,10 +197,11 @@ class CitizenViewModel(
         _uiState.update {
             it.copy(
                 pendingGovAlert = GovernmentAlert(),
-                isGovernmentAlertDialogOpen = true
+                isGovernmentAlertDialogOpen = false
             )
         }
     }
+
 
     fun dismissGovernmentAlert() {
         _uiState.update { it.copy(isGovernmentAlertDialogOpen = false) }
@@ -291,7 +290,7 @@ class CitizenViewModel(
                 ),
                 meshStatus = it.meshStatus.copy(
                     isMeshActive = true,
-                    peersNearby = (it.meshStatus.peersNearby).coerceAtLeast(3)
+                    peersNearby = meshRelayEngine?.getActivePeerCount() ?: 0
                 )
             )
         }

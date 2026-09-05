@@ -48,7 +48,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.project.garuda.ui.theme.AmberAlert
+import com.project.garuda.ui.theme.AmberAlertContainer
 import com.project.garuda.ui.theme.AmoledBlack
+
 import com.project.garuda.ui.theme.BorderSubtle
 import com.project.garuda.ui.theme.EmergencyBloodRed
 import com.project.garuda.ui.theme.GarudaTheme
@@ -108,11 +110,17 @@ fun StandbyScreen(
                 }
 
                 // Status Badge
+                val isGovEmergencyDeclared = state.pendingGovAlert != null
+                val peerCount = state.meshStatus.peersNearby
+                val badgeText = if (isGovEmergencyDeclared) "Peer: $peerCount" else "Standby Mode"
+                val badgeColor = if (isGovEmergencyDeclared) AmberAlert else SafeGreen
+                val badgeContainer = if (isGovEmergencyDeclared) AmberAlertContainer else SafeGreenContainer
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(SafeGreenContainer)
-                        .border(1.dp, SafeGreen, RoundedCornerShape(20.dp))
+                        .background(badgeContainer)
+                        .border(1.dp, badgeColor, RoundedCornerShape(20.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -120,12 +128,12 @@ fun StandbyScreen(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(SafeGreen)
+                                .background(badgeColor)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Standby Mode",
-                            color = SafeGreen,
+                            text = badgeText,
+                            color = badgeColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -134,27 +142,34 @@ fun StandbyScreen(
             }
         }
 
-        // Subtitle Card: Standby Peace status
+        // Subtitle Card: Standby Peace / Active Emergency status
         item {
+            val isGovEmergencyDeclared = state.pendingGovAlert != null
             Card(
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isGovEmergencyDeclared) AmberAlertContainer else SurfaceDark
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                    .border(
+                        1.dp,
+                        if (isGovEmergencyDeclared) AmberAlert else BorderSubtle,
+                        RoundedCornerShape(16.dp)
+                    )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "No Active Disaster in your Region",
+                        text = if (isGovEmergencyDeclared) (state.pendingGovAlert?.headline ?: "DISASTER ALERT ACTIVE") else "No Active Disaster in your Region",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = if (isGovEmergencyDeclared) AmberAlert else Color.White
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Your device is standing by. Prepare your emergency supplies, review survival manuals, and keep your offline medical profile updated.",
+                        text = if (isGovEmergencyDeclared) (state.pendingGovAlert?.instructions ?: "Emergency Directive Received.") else "Your device is standing by. Prepare your emergency supplies, review survival manuals, and keep your offline medical profile updated.",
                         fontSize = 13.sp,
-                        color = TextSecondaryDark,
+                        color = if (isGovEmergencyDeclared) Color.White else TextSecondaryDark,
                         lineHeight = 18.sp
                     )
 
@@ -163,6 +178,7 @@ fun StandbyScreen(
                 }
             }
         }
+
 
         // Medical Profile Setup Card
         item {

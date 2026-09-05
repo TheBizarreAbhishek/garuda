@@ -75,7 +75,7 @@ class CitizenViewModelTest {
         viewModel.triggerGovernmentEmergencyAlert()
 
         var state = viewModel.uiState.value
-        assertTrue(state.isGovernmentAlertDialogOpen)
+        assertFalse(state.isGovernmentAlertDialogOpen)
         assertNotNull(state.pendingGovAlert)
 
         viewModel.acknowledgeAlertAndEnterEmergency()
