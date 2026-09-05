@@ -247,8 +247,58 @@ class FirebaseCloudGateway(
             }
             return@withContext success
         } catch (e: Exception) {
-            Log.e(TAG, "Error uploading to Firestore: ${e.message}")
+            Log.e(TAG, "Error uploading SOS to Firestore: ${e.message}")
             return@withContext false
+        }
+    }
+
+    suspend fun uploadMeshPeerToFirestore(
+        peerHash: Int,
+        latitude: Double = 0.0,
+        longitude: Double = 0.0,
+        hopCount: Int = 1
+    ) = withContext(Dispatchers.IO) {
+        try {
+            val peerId = "MESH_NODE_${Math.abs(peerHash)}"
+            val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/active_nodes/$peerId?key=$API_KEY"
+            val url = URL(urlString)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "PATCH"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+            }
+
+            val locationData = hardwareManager?.locationFlow?.value
+            val lat = if (latitude != 0.0) latitude else (locationData?.latitude ?: 0.0)
+            val lon = if (longitude != 0.0) longitude else (locationData?.longitude ?: 0.0)
+            val locName = locationData?.locationName ?: "Mesh Ground Sector"
+
+            val fields = JSONObject().apply {
+                put("deviceId", JSONObject().put("stringValue", peerId))
+                put("deviceName", JSONObject().put("stringValue", "Mesh Node #${Math.abs(peerHash) % 9000 + 1000}"))
+                put("status", JSONObject().put("stringValue", "ONLINE"))
+                put("batteryLevel", JSONObject().put("integerValue", "85"))
+                put("meshRole", JSONObject().put("stringValue", "Offline Field Survivor Node"))
+                put("lastSeen", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
+                put("location", JSONObject().put("stringValue", locName))
+                put("latitude", JSONObject().put("doubleValue", lat))
+                put("longitude", JSONObject().put("doubleValue", lon))
+                put("connectionType", JSONObject().put("stringValue", "BLE_MESH_RELAY"))
+                put("isDirectCloud", JSONObject().put("booleanValue", false))
+                put("hopCount", JSONObject().put("integerValue", "$hopCount"))
+            }
+
+            val body = JSONObject().put("fields", fields)
+            val writer = OutputStreamWriter(connection.outputStream)
+            writer.write(body.toString())
+            writer.flush()
+            writer.close()
+
+            connection.responseCode
+        } catch (e: Exception) {
+            Log.v(TAG, "Mesh peer upload note: ${e.message}")
         }
     }
 }

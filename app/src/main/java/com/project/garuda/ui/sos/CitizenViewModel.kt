@@ -109,9 +109,33 @@ class CitizenViewModel(
                             )
                         }
 
+                        // 🌐 EDGE GATEWAY RELAY TO CLOUD: If this phone has Internet, relay offline mesh peer telemetry to Firestore!
+                        if (firebaseGateway.syncState.value.isConnected && packet.deviceHash != 0 && packet.deviceHash != localDeviceHash) {
+                            viewModelScope.launch {
+                                firebaseGateway.uploadMeshPeerToFirestore(
+                                    peerHash = packet.deviceHash,
+                                    latitude = packet.latitude,
+                                    longitude = packet.longitude,
+                                    hopCount = packet.hopCount.coerceAtLeast(1)
+                                )
+                            }
+                        }
+
                         // 🚨 Emergency Declaration Relayed via BLE Mesh from other peer nodes
                         if (packet.packetType == GarudaPacket.TYPE_EMERGENCY_BROADCAST || 
                             (packet.packetType == GarudaPacket.TYPE_SOS && packet.emergencyType != GarudaPacket.EMERGENCY_NONE)) {
+                            
+                            // If SOS, relay distress signal up to Firestore Cloud if this node has internet
+                            if (packet.packetType == GarudaPacket.TYPE_SOS && firebaseGateway.syncState.value.isConnected) {
+                                viewModelScope.launch {
+                                    firebaseGateway.uploadSosToFirestore(
+                                        packet = packet,
+                                        victimName = "Survivor Node (BLE Mesh)",
+                                        notes = "Offline BLE distress signal relayed to Cloud by Gateway Node $localDeviceHash (Hop #${packet.hopCount})"
+                                    )
+                                }
+                            }
+
                             appContext?.let { ctx ->
                                 com.project.garuda.notification.GarudaNotificationManager.showHeadsUpNotification(
                                     context = ctx,
