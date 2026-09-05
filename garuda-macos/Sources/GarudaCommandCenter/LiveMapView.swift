@@ -6,8 +6,8 @@ public struct LiveMapView: View {
     
     @State private var position: MapCameraPosition = .region(
         MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 11.6854, longitude: 76.1320),
-            span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
+            center: CLLocationCoordinate2D(latitude: 20.5937, longitude: 78.9629),
+            span: MKCoordinateSpan(latitudeDelta: 22.0, longitudeDelta: 22.0)
         )
     )
     
@@ -84,27 +84,38 @@ public struct LiveMapView: View {
                 // Mesh Multi-Hop Polyline Overlay
                 if showMeshHops {
                     ForEach(store.signals.filter { $0.status != .rescued }) { signal in
-                        MapPolyline(coordinates: [
-                            signal.coordinate,
-                            CLLocationCoordinate2D(latitude: signal.latitude + 0.006, longitude: signal.longitude + 0.005),
-                            CLLocationCoordinate2D(latitude: 11.6960, longitude: 76.1480)
-                        ])
-                        .stroke(
-                            signal.priority == .critical ? Color.red.opacity(0.7) : Color.blue.opacity(0.6),
-                            style: StrokeStyle(lineWidth: 2.5, dash: [6, 4])
-                        )
+                        if let shelter = store.shelters.first {
+                            MapPolyline(coordinates: [
+                                signal.coordinate,
+                                CLLocationCoordinate2D(latitude: signal.latitude + 0.003, longitude: signal.longitude + 0.003),
+                                shelter.coordinate
+                            ])
+                            .stroke(
+                                signal.priority == .critical ? Color.red.opacity(0.7) : Color.blue.opacity(0.6),
+                                style: StrokeStyle(lineWidth: 2.5, dash: [6, 4])
+                            )
+                        } else {
+                            MapPolyline(coordinates: [
+                                signal.coordinate,
+                                CLLocationCoordinate2D(latitude: signal.latitude + 0.004, longitude: signal.longitude + 0.004)
+                            ])
+                            .stroke(
+                                signal.priority == .critical ? Color.red.opacity(0.7) : Color.blue.opacity(0.6),
+                                style: StrokeStyle(lineWidth: 2.5, dash: [6, 4])
+                            )
+                        }
                     }
                 }
                 
                 // ISRO / IMD Satellite Storm Radar Heat Zones
-                if store.satelliteMapMode == .imdDopplerRadar {
-                    MapCircle(center: CLLocationCoordinate2D(latitude: 11.6854, longitude: 76.1320), radius: 4500)
+                if store.satelliteMapMode == .imdDopplerRadar, let activeCenter = store.signals.first?.coordinate ?? store.hazards.first?.coordinate {
+                    MapCircle(center: activeCenter, radius: 4500)
                         .foregroundStyle(Color.red.opacity(store.imdRadarOpacity * 0.35))
                     
-                    MapCircle(center: CLLocationCoordinate2D(latitude: 11.6854, longitude: 76.1320), radius: 8000)
+                    MapCircle(center: activeCenter, radius: 8000)
                         .foregroundStyle(Color.orange.opacity(store.imdRadarOpacity * 0.22))
                     
-                    MapCircle(center: CLLocationCoordinate2D(latitude: 11.6854, longitude: 76.1320), radius: 14000)
+                    MapCircle(center: activeCenter, radius: 14000)
                         .foregroundStyle(Color.yellow.opacity(store.imdRadarOpacity * 0.12))
                 }
             }
@@ -313,6 +324,30 @@ public struct LiveMapView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 .padding(14)
+            }
+        }
+        .onChange(of: store.selectedSignal) { _, newSignal in
+            if let newSignal = newSignal {
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    position = .region(
+                        MKCoordinateRegion(
+                            center: newSignal.coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+                        )
+                    )
+                }
+            }
+        }
+        .onChange(of: store.signals.count) { oldCount, newCount in
+            if oldCount == 0, let firstSignal = store.signals.first {
+                withAnimation(.easeInOut(duration: 1.2)) {
+                    position = .region(
+                        MKCoordinateRegion(
+                            center: firstSignal.coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                        )
+                    )
+                }
             }
         }
     }

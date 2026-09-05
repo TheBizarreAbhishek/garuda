@@ -32,33 +32,46 @@ public struct TestRunner {
             }
         }
         
-        // 1. Initial State
+        // 1. Initial State (Clean Real-World Mode)
         let store = CommandCenterStore()
-        test("Initial Store State Verification") {
-            assert(store.totalActiveSignals >= 3, "Total active signals must be >= 3")
-            assert(store.criticalCount >= 1, "Critical signals must be >= 1")
-            assert(store.inProgressCount >= 1, "In-progress signals must be >= 1")
-            assert(store.resolvedCount >= 1, "Resolved signals must be >= 1")
+        test("Initial Clean Real-World Store State") {
+            assert(store.signals.isEmpty, "Signals should be empty on startup (no mock data)")
+            assert(store.hazards.isEmpty, "Hazards should be empty on startup")
+            assert(store.isEmergencyBroadcastActive == false, "Emergency broadcast should be standby initially")
         }
         
-        // 2. Status Transition Workflow
+        // 2. Real-time Ingestion & Status Transition Workflow
         test("Rescue Status Transition & NDRF Assignment") {
-            guard let pending = store.signals.first(where: { $0.status == .pending }) else {
-                throw NSError(domain: "Test", code: 1, userInfo: [NSLocalizedDescriptionKey: "No pending signal"])
-            }
+            let testSignal = SosSignal(
+                id: "TEST-SIG-001",
+                victimName: "Real Citizen Node",
+                bloodGroup: "O+",
+                emergencyType: .medical,
+                priority: .critical,
+                latitude: 19.0760,
+                longitude: 72.8777,
+                hopCount: 2,
+                batteryLevel: 45,
+                timestamp: Date(),
+                status: .pending,
+                notes: "Direct live packet test",
+                relayedByGatewayId: "GATEWAY-LIVE-01"
+            )
+            store.serverDidReceiveSosSignal(testSignal)
+            assert(store.signals.count == 1, "Store should contain received live signal")
             
             store.updateSignalStatus(
-                id: pending.id,
+                id: "TEST-SIG-001",
                 newStatus: .dispatched,
                 assignedUnit: "NDRF Battalion 4"
             )
             
-            let dispatchedSignal = store.signals.first(where: { $0.id == pending.id })
+            let dispatchedSignal = store.signals.first(where: { $0.id == "TEST-SIG-001" })
             assert(dispatchedSignal?.status == .dispatched, "Status should be dispatched")
             assert(dispatchedSignal?.assignedUnit == "NDRF Battalion 4", "Unit should be assigned")
             
-            store.updateSignalStatus(id: pending.id, newStatus: .rescued)
-            let rescuedSignal = store.signals.first(where: { $0.id == pending.id })
+            store.updateSignalStatus(id: "TEST-SIG-001", newStatus: .rescued)
+            let rescuedSignal = store.signals.first(where: { $0.id == "TEST-SIG-001" })
             assert(rescuedSignal?.status == .rescued, "Status should be rescued")
         }
         

@@ -27,7 +27,9 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
     private var simulationTimer: AnyCancellable?
     
     public init() {
-        loadMockData()
+        // Pure Real Data Mode: No mock data loaded on startup.
+        // Data is populated live from connected mobile devices via CommandGridServer (SSE / :8080)
+        // and Firebase Firestore cloud listener.
         setupLiveServer()
         setupLiveFirebaseCloud()
     }
@@ -330,136 +332,5 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         }
     }
     
-    private func loadMockData() {
-        signals = [
-            SosSignal(
-                victimName: "Rohan Kulkarni & Family",
-                bloodGroup: "B+",
-                emergencyType: .trapped,
-                priority: .critical,
-                latitude: 11.6854,
-                longitude: 76.1320,
-                hopCount: 3,
-                batteryLevel: 22,
-                timestamp: Date().addingTimeInterval(-300),
-                status: .pending,
-                notes: "3 people trapped on 2nd floor, water level rising rapidly. Relayed over 3 BLE hops.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-01"
-            ),
-            SosSignal(
-                victimName: "Dr. Meenakshi Sundaram",
-                bloodGroup: "O+",
-                emergencyType: .medical,
-                priority: .critical,
-                latitude: 11.6912,
-                longitude: 76.1410,
-                hopCount: 2,
-                batteryLevel: 41,
-                timestamp: Date().addingTimeInterval(-720),
-                status: .dispatched,
-                notes: "Elderly patient requiring oxygen and insulin. Debris blocking road.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-02",
-                assignedUnit: "NDRF Team Alpha (12 Personnel)"
-            ),
-            SosSignal(
-                victimName: "Vikas Deshmukh",
-                bloodGroup: "AB+",
-                emergencyType: .flood,
-                priority: .urgent,
-                latitude: 11.6780,
-                longitude: 76.1250,
-                hopCount: 1,
-                batteryLevel: 68,
-                timestamp: Date().addingTimeInterval(-1200),
-                status: .inProgress,
-                notes: "Stuck on bridge embankment. Boat needed.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-01",
-                assignedUnit: "SDRF Boat Squadron 4"
-            ),
-            SosSignal(
-                victimName: "Kavita Pillai",
-                bloodGroup: "A+",
-                emergencyType: .general,
-                priority: .safe,
-                latitude: 11.6990,
-                longitude: 76.1550,
-                hopCount: 4,
-                batteryLevel: 89,
-                timestamp: Date().addingTimeInterval(-1800),
-                status: .rescued,
-                notes: "Evacuated to Meppadi Community Relief Shelter.",
-                relayedByGatewayId: "GATEWAY-UPLINK-KERALA-03",
-                assignedUnit: "Local Volunteer Rescue Group"
-            )
-        ]
-        
-        alerts = []
-        
-        hazards = [
-            HazardReport(
-                title: "Meppadi Main Bridge Collapsed",
-                category: "Structural / Road Cutoff",
-                latitude: 11.6890,
-                longitude: 76.1360,
-                reporterName: "Mesh Node #104",
-                reportedAt: Date().addingTimeInterval(-900),
-                isVerified: true,
-                description: "Bridge completely washed away. Route completely impassable for heavy rescue vehicles."
-            ),
-            HazardReport(
-                title: "High Voltage Power Line Down",
-                category: "Electrical Hazard",
-                latitude: 11.6810,
-                longitude: 76.1280,
-                reporterName: "Mesh Node #082",
-                reportedAt: Date().addingTimeInterval(-1400),
-                isVerified: false,
-                description: "Submerged transformer sparking in standing water. Electrocution risk."
-            )
-        ]
-        
-        shelters = [
-            ReliefShelter(
-                name: "NDMA St. Joseph Relief Camp & Medical Base",
-                latitude: 11.6960,
-                longitude: 76.1480,
-                capacity: 500,
-                currentOccupancy: 214,
-                suppliesStatus: "Food Rations, Clean Water & 4 Doctors on site",
-                contactPhone: "+91 94471 23456"
-            ),
-            ReliefShelter(
-                name: "Government Higher Secondary School Shelter",
-                latitude: 11.6780,
-                longitude: 76.1240,
-                capacity: 350,
-                currentOccupancy: 310,
-                suppliesStatus: "Nearly Full - Blankets & First Aid Available",
-                contactPhone: "+91 94471 88990"
-            )
-        ]
-        
-        ndrfUnits = [
-            NdrfRescueUnit(
-                unitName: "10th Bn NDRF (Airborne Helo Rescue)",
-                battalion: "10th Battalion NDRF",
-                type: "Airborne Winch & Flood Extraction",
-                latitude: 11.6930,
-                longitude: 76.1390,
-                status: "En Route to Incident #1",
-                assignedVictimId: signals.first?.id
-            ),
-            NdrfRescueUnit(
-                unitName: "SDRF Fast Response Watercraft Unit",
-                battalion: "State Disaster Response Force",
-                type: "Inflatable Power Boat & Life Rafts",
-                latitude: 11.6840,
-                longitude: 76.1300,
-                status: "On-Scene Conducting Extraction",
-                assignedVictimId: nil
-            )
-        ]
-        
-        selectedSignal = signals.first
-    }
+
 }
