@@ -62,9 +62,9 @@ public struct LiveMapView: View {
                     ForEach(store.activeDevices.filter { $0.latitude != 0.0 && $0.longitude != 0.0 }) { device in
                         if let coord = device.coordinate {
                             Annotation(
-                                device.name,
+                                "",
                                 coordinate: coord,
-                                anchor: .bottom
+                                anchor: .center
                             ) {
                                 ActiveNodeMapPin(device: device, isSelected: selectedDevice?.id == device.id)
                                     .onTapGesture {
@@ -1366,54 +1366,52 @@ public struct ActiveNodeMapPin: View {
     let isSelected: Bool
     
     public var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 3) {
             ZStack {
-                // Pulsing outer beacon ring
+                // Tactical Radar Ping Halo
                 Circle()
-                    .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.4), lineWidth: isSelected ? 3 : 1.5)
-                    .frame(width: isSelected ? 38 : 28, height: isSelected ? 38 : 28)
+                    .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.35), lineWidth: isSelected ? 3 : 1.5)
+                    .frame(width: isSelected ? 34 : 26, height: isSelected ? 34 : 26)
                 
-                // Pin background body
+                // Pin Core
                 Circle()
-                    .fill(device.isDirectCloud ? Color.green.opacity(0.9) : Color.cyan.opacity(0.9))
-                    .frame(width: isSelected ? 30 : 22, height: isSelected ? 30 : 22)
-                    .shadow(color: (device.isDirectCloud ? Color.green : Color.cyan).opacity(0.6), radius: isSelected ? 8 : 4)
+                    .fill(device.isDirectCloud ? Color.green : Color.cyan)
+                    .frame(width: isSelected ? 22 : 16, height: isSelected ? 22 : 16)
+                    .shadow(color: (device.isDirectCloud ? Color.green : Color.cyan).opacity(0.8), radius: isSelected ? 10 : 5)
                 
-                // Icon
+                // Core Icon
                 Image(systemName: device.isDirectCloud ? "network" : "antenna.radiowaves.left.and.right")
-                    .font(.system(size: isSelected ? 13 : 10, weight: .bold))
+                    .font(.system(size: isSelected ? 10 : 8, weight: .bold))
                     .foregroundColor(.black)
             }
             
-            // Callout Label
-            VStack(spacing: 1) {
-                HStack(spacing: 3) {
-                    Text(device.isDirectCloud ? "🌐" : "📡")
-                        .font(.system(size: 8))
-                    Text(device.name.components(separatedBy: " ").first ?? "Node")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                }
+            // Tactical Disaster Sector Tag
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(device.isDirectCloud ? Color.green : Color.cyan)
+                    .frame(width: 5, height: 5)
                 
-                HStack(spacing: 2) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 7))
-                        .foregroundColor(device.batteryLevel > 30 ? .green : .red)
-                    Text("\(device.batteryLevel)%")
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.85))
-                }
+                Text(device.isDirectCloud ? "CLOUD GATEWAY" : "MESH RELAY")
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .foregroundColor(.white)
+                
+                Text("•")
+                    .font(.system(size: 7))
+                    .foregroundColor(.secondary)
+                
+                Text("ONLINE")
+                    .font(.system(size: 7, weight: .heavy, design: .monospaced))
+                    .foregroundColor(device.isDirectCloud ? .green : .cyan)
             }
             .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.vertical, 3)
             .background(Color.black.opacity(0.85))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.4), lineWidth: 1)
+                Capsule()
+                    .stroke((device.isDirectCloud ? Color.green : Color.cyan).opacity(0.45), lineWidth: 1)
             )
-            .offset(y: 2)
+            .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
         }
     }
 }
