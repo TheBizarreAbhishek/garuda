@@ -255,17 +255,31 @@ struct DeviceCard: View {
             
             // Battery & Health Gauge
             VStack(alignment: .trailing, spacing: 6) {
-                HStack(spacing: 4) {
-                    Image(systemName: batteryIconName(for: device.batteryLevel))
-                        .foregroundColor(batteryColor(for: device.batteryLevel))
-                    Text("\(device.batteryLevel)%")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundColor(batteryColor(for: device.batteryLevel))
+                if device.isDirectCloud {
+                    HStack(spacing: 4) {
+                        Image(systemName: batteryIconName(for: device.batteryLevel))
+                            .foregroundColor(batteryColor(for: device.batteryLevel))
+                        Text("\(device.batteryLevel)%")
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundColor(batteryColor(for: device.batteryLevel))
+                    }
+                    
+                    Text("Cloud: Live")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.green.opacity(0.9))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .foregroundColor(.cyan)
+                        Text("Hop #\(max(device.hopCount, 1))")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(.cyan)
+                    }
+                    
+                    Text("Mesh: Relayed")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.cyan.opacity(0.9))
                 }
-                
-                Text("Heartbeat: Live")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.green.opacity(0.9))
             }
         }
         .padding(14)

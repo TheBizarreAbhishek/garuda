@@ -275,20 +275,21 @@ class FirebaseCloudGateway(
             val lon = if (longitude != 0.0) longitude else (locationData?.longitude ?: 0.0)
             val locName = locationData?.locationName ?: "Mesh Ground Sector"
 
-            val fields = JSONObject().apply {
-                put("deviceId", JSONObject().put("stringValue", peerId))
-                put("deviceName", JSONObject().put("stringValue", "Mesh Node #${Math.abs(peerHash) % 9000 + 1000}"))
-                put("status", JSONObject().put("stringValue", "ONLINE"))
-                put("batteryLevel", JSONObject().put("integerValue", "85"))
-                put("meshRole", JSONObject().put("stringValue", "Offline Field Survivor Node"))
-                put("lastSeen", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
-                put("location", JSONObject().put("stringValue", locName))
-                put("latitude", JSONObject().put("doubleValue", lat))
-                put("longitude", JSONObject().put("doubleValue", lon))
-                put("connectionType", JSONObject().put("stringValue", "BLE_MESH_RELAY"))
-                put("isDirectCloud", JSONObject().put("booleanValue", false))
-                put("hopCount", JSONObject().put("integerValue", "$hopCount"))
-            }
+                val realBattery = hardwareManager?.getRealBatteryPercentage() ?: 80
+                val fields = JSONObject().apply {
+                    put("deviceId", JSONObject().put("stringValue", peerId))
+                    put("deviceName", JSONObject().put("stringValue", "Mesh Node #${Math.abs(peerHash) % 9000 + 1000}"))
+                    put("status", JSONObject().put("stringValue", "ONLINE"))
+                    put("batteryLevel", JSONObject().put("integerValue", "0"))
+                    put("meshRole", JSONObject().put("stringValue", "Offline Field Survivor Node"))
+                    put("lastSeen", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
+                    put("location", JSONObject().put("stringValue", locName))
+                    put("latitude", JSONObject().put("doubleValue", lat))
+                    put("longitude", JSONObject().put("doubleValue", lon))
+                    put("connectionType", JSONObject().put("stringValue", "BLE_MESH_RELAY"))
+                    put("isDirectCloud", JSONObject().put("booleanValue", false))
+                    put("hopCount", JSONObject().put("integerValue", "$hopCount"))
+                }
 
             val body = JSONObject().put("fields", fields)
             val writer = OutputStreamWriter(connection.outputStream)
