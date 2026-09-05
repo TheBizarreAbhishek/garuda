@@ -7,6 +7,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
     case reliefCamps = "Relief Camps"
     case imdRadar = "IMD Satellite Radar"
     case hazardReports = "Hazard Reports"
+    case aiCopilot = "AI Disaster Copilot"
     case meshTelemetry = "Mesh Telemetry"
     
     public var id: String { rawValue }
@@ -19,6 +20,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .reliefCamps: return "tent.fill"
         case .imdRadar: return "globe.asia.australia.fill"
         case .hazardReports: return "exclamationmark.triangle.fill"
+        case .aiCopilot: return "sparkles"
         case .meshTelemetry: return "waveform.path.ecg"
         }
     }
@@ -128,6 +130,14 @@ public struct MainAppView: View {
                                         Circle()
                                             .fill(Color.cyan)
                                             .frame(width: 6, height: 6)
+                                    case .aiCopilot:
+                                        Text("AI")
+                                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(Color.purple.opacity(0.8))
+                                            .foregroundColor(.white)
+                                            .clipShape(Capsule())
                                     case .meshTelemetry:
                                         if store.activeDevices.count > 0 {
                                             Circle()
@@ -277,6 +287,8 @@ public struct MainAppView: View {
                     ImdSatelliteRadarView(store: store)
                 case .hazardReports:
                     HazardGalleryView(store: store)
+                case .aiCopilot:
+                    AiDisasterCopilotView(store: store)
                 case .meshTelemetry:
                     MeshTelemetryView(store: store)
                 }
