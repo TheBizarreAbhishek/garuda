@@ -249,10 +249,10 @@ public struct ImdSatelliteRadarView: View {
                         Image(systemName: "antenna.radiowaves.left.and.right")
                             .foregroundColor(.green)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("UPLINK STATUS")
+                            Text("EARTH STATION")
                                 .font(.system(size: 7, weight: .black, design: .monospaced))
                                 .foregroundColor(.secondary)
-                            Text("SAC Bhopal Locked")
+                            Text("IMD New Delhi (Synced)")
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundColor(.green)
                         }
