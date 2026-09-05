@@ -154,6 +154,19 @@ class UplinkGatewayManager(
                     } else if (line.startsWith("data: ")) {
                         val dataJson = line.removePrefix("data: ")
                         try {
+                            if (currentEvent == "emergency_deactivated") {
+                                _connectionState.value = _connectionState.value.copy(
+                                    isEmergencyActiveFromGov = false,
+                                    activeDistrictAlert = "Standby",
+                                    alertHeadline = "",
+                                    alertInstructions = ""
+                                )
+                                if (context != null) {
+                                    GarudaNotificationManager.dismissEmergencyNotification(context)
+                                }
+                                continue
+                            }
+
                             val json = JSONObject(dataJson)
                             val title = json.optString("title", "GOVERNMENT BROADCAST")
                             val message = json.optString("message", json.optString("instructions", "New directive received."))
@@ -168,7 +181,7 @@ class UplinkGatewayManager(
                                 alertInstructions = "$priority: $message"
                             )
 
-                            // Trigger real-time system notification on citizen phone!
+                            // Trigger real-time system notification on citizen phone (deduplicated automatically)
                             if (context != null) {
                                 GarudaNotificationManager.showHeadsUpNotification(
                                     context = context,
