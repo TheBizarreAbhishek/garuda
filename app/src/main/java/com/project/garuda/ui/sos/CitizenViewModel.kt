@@ -84,13 +84,18 @@ class CitizenViewModel(
                 scannerManager = BleScannerManager(appContext)
                 meshRelayEngine = MeshRelayEngine(advertiserManager, scannerManager, viewModelScope)
 
+                startMeshScanner()
+                startHeartbeatBroadcaster()
+
                 // Listen to live incoming mesh packets over Bluetooth
                 viewModelScope.launch {
                     meshRelayEngine?.incomingPackets?.collect { packet ->
                         Log.d(TAG, "Received live BLE Mesh Packet: ID=0x${packet.packetId.toString(16)}, type=${packet.packetType}, hops=${packet.hopCount}")
+                        val realPeers = meshRelayEngine?.getActivePeerCount() ?: 0
                         _uiState.update { current ->
                             current.copy(
                                 meshStatus = current.meshStatus.copy(
+                                    peersNearby = realPeers,
                                     packetsRelayed = current.meshStatus.packetsRelayed + 1,
                                     hopCount = packet.hopCount.coerceAtLeast(1),
                                     lastSyncAgo = "Just now"
@@ -270,10 +275,39 @@ class CitizenViewModel(
         _uiState.update { it.copy(mode = mode) }
     }
 
+    private var heartbeatJob: Job? = null
+
+    private fun startHeartbeatBroadcaster() {
+        heartbeatJob?.cancel()
+        heartbeatJob = viewModelScope.launch {
+            while (isActive) {
+                val nowEpoch = (System.currentTimeMillis() / 1000).toInt()
+                val deviceHashInt = (Build.MODEL ?: "GarudaCitizen").hashCode()
+                val heartbeatPacket = GarudaPacket(
+                    packetType = GarudaPacket.TYPE_HEARTBEAT,
+                    packetId = Random.nextInt(10000, 99999),
+                    deviceHash = deviceHashInt,
+                    timestamp = nowEpoch,
+                    latitude = 0.0,
+                    longitude = 0.0,
+                    emergencyType = GarudaPacket.EMERGENCY_NONE,
+                    hopCount = 0,
+                    ttl = 1
+                )
+                try {
+                    meshRelayEngine?.broadcastPacket(heartbeatPacket)
+                } catch (e: Exception) {
+                    Log.v(TAG, "Heartbeat broadcast failed", e)
+                }
+                delay(3000) // Periodic 3s BLE presence beacon for active nearby peer discovery
+            }
+        }
+    }
+
     private fun startMeshScanner() {
         try {
-            scannerManager?.startScanning { rawBytes ->
-                meshRelayEngine?.processIncomingRawBytes(rawBytes)
+            scannerManager?.startScanning { deviceAddress, rawBytes ->
+                meshRelayEngine?.processIncomingRawBytes(deviceAddress, rawBytes)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start BLE scanning", e)

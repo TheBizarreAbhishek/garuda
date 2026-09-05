@@ -46,6 +46,16 @@ class MeshRelayEngine(
     val incomingPackets: SharedFlow<GarudaPacket> = _incomingPackets.asSharedFlow()
 
     /**
+     * Processes an incoming raw binary BLE packet with device hardware address.
+     */
+    fun processIncomingRawBytes(deviceAddress: String, rawBytes: ByteArray) {
+        if (deviceAddress.isNotEmpty()) {
+            activePeersMap[deviceAddress.hashCode()] = System.currentTimeMillis()
+        }
+        processIncomingRawBytes(rawBytes)
+    }
+
+    /**
      * Processes an incoming raw binary BLE packet.
      */
     fun processIncomingRawBytes(rawBytes: ByteArray) {
