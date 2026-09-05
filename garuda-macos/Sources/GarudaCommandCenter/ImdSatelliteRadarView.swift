@@ -5,7 +5,10 @@ public struct ImdSatelliteRadarView: View {
     @ObservedObject var store: CommandCenterStore
     @State private var selectedChannelId: String = "IR1"
     @State private var lastRefreshed: Date = Date()
-    @State private var imageScale: CGFloat = 1.0
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
     
     struct SatelliteChannel: Identifiable {
         let id: String
@@ -205,13 +208,58 @@ public struct ImdSatelliteRadarView: View {
                                 image
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
-                                    .scaleEffect(imageScale)
+                                    .scaleEffect(scale)
+                                    .offset(offset)
                                     .gesture(
-                                        MagnificationGesture()
-                                            .onChanged { val in
-                                                imageScale = min(max(val, 0.8), 3.0)
-                                            }
+                                        SimultaneousGesture(
+                                            MagnificationGesture()
+                                                .onChanged { delta in
+                                                    let newScale = lastScale * delta
+                                                    scale = min(max(newScale, 0.7), 4.5)
+                                                }
+                                                .onEnded { _ in
+                                                    lastScale = scale
+                                                    if scale <= 1.0 {
+                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                            offset = .zero
+                                                            lastOffset = .zero
+                                                        }
+                                                    }
+                                                },
+                                            DragGesture()
+                                                .onChanged { val in
+                                                    if scale > 1.0 {
+                                                        offset = CGSize(
+                                                            width: lastOffset.width + val.translation.width,
+                                                            height: lastOffset.height + val.translation.height
+                                                        )
+                                                    }
+                                                }
+                                                .onEnded { _ in
+                                                    if scale <= 1.0 {
+                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                            offset = .zero
+                                                            lastOffset = .zero
+                                                        }
+                                                    } else {
+                                                        lastOffset = offset
+                                                    }
+                                                }
+                                        )
                                     )
+                                    .onTapGesture(count: 2) {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            if scale > 1.2 {
+                                                scale = 1.0
+                                                lastScale = 1.0
+                                                offset = .zero
+                                                lastOffset = .zero
+                                            } else {
+                                                scale = 2.2
+                                                lastScale = 2.2
+                                            }
+                                        }
+                                    }
                             case .failure(let error):
                                 VStack(spacing: 10) {
                                     Image(systemName: "antenna.radiowaves.left.and.right.slash")
@@ -228,6 +276,7 @@ public struct ImdSatelliteRadarView: View {
                                 EmptyView()
                             }
                         }
+                        .clipped()
                         
                         // Overlay HUD Badges (Top Left & Top Right)
                         VStack {
@@ -248,32 +297,52 @@ public struct ImdSatelliteRadarView: View {
                                 
                                 Spacer()
                                 
+                                // Interactive Zoom Controller Bar
                                 HStack(spacing: 6) {
                                     Button {
-                                        withAnimation { imageScale = max(0.8, imageScale - 0.25) }
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            scale = max(0.7, scale - 0.35)
+                                            lastScale = scale
+                                            if scale <= 1.0 {
+                                                offset = .zero
+                                                lastOffset = .zero
+                                            }
+                                        }
                                     } label: {
                                         Image(systemName: "minus.magnifyingglass")
                                     }
+                                    .buttonStyle(.plain)
                                     
                                     Button {
-                                        withAnimation { imageScale = 1.0 }
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            scale = 1.0
+                                            lastScale = 1.0
+                                            offset = .zero
+                                            lastOffset = .zero
+                                        }
                                     } label: {
-                                        Text("100%")
+                                        Text("\(Int(scale * 100))%")
                                             .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.cyan)
                                     }
+                                    .buttonStyle(.plain)
                                     
                                     Button {
-                                        withAnimation { imageScale = min(3.0, imageScale + 0.25) }
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            scale = min(4.5, scale + 0.35)
+                                            lastScale = scale
+                                        }
                                     } label: {
                                         Image(systemName: "plus.magnifyingglass")
                                     }
+                                    .buttonStyle(.plain)
                                 }
                                 .font(.system(size: 12, weight: .bold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
                                 .background(.ultraThinMaterial)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .buttonStyle(.plain)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
                             }
                             .padding(14)
                             
@@ -319,7 +388,12 @@ public struct ImdSatelliteRadarView: View {
                             ForEach(channels) { ch in
                                 Button {
                                     selectedChannelId = ch.id
-                                    imageScale = 1.0
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        scale = 1.0
+                                        lastScale = 1.0
+                                        offset = .zero
+                                        lastOffset = .zero
+                                    }
                                 } label: {
                                     HStack(spacing: 12) {
                                         ZStack {
