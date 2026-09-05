@@ -49,7 +49,7 @@ class FirebaseCloudGateway(
     private var pollJob: Job? = null
     val hardwareManager = context?.let { DeviceHardwareManager(it) }
 
-    private val deviceId: String = {
+    val deviceId: String = {
         val model = (Build.MODEL ?: "GalaxyDevice").replace(" ", "_")
         val manufacturer = (Build.MANUFACTURER ?: "Samsung").replace(" ", "_")
         "${manufacturer}_${model}_NODE"
