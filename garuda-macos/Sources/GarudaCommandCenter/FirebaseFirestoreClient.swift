@@ -217,10 +217,15 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                     let title = (fields["title"] as? [String: Any])?["stringValue"] as? String ?? "Hazard"
                     let category = (fields["category"] as? [String: Any])?["stringValue"] as? String ?? "Obstacle"
                     let desc = (fields["description"] as? [String: Any])?["stringValue"] as? String ?? ""
-                    let reporter = (fields["reporterName"] as? [String: Any])?["stringValue"] as? String ?? "Citizen"
+                    let reporter = (fields["reporterName"] as? [String: Any])?["stringValue"] as? String ?? "Citizen via BLE Mesh"
                     let lat = (fields["latitude"] as? [String: Any])?["doubleValue"] as? Double ?? 11.6854
                     let lon = (fields["longitude"] as? [String: Any])?["doubleValue"] as? Double ?? 76.1320
                     let isVerified = (fields["isVerified"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                    let statusStr = (fields["status"] as? [String: Any])?["stringValue"] as? String
+                    let status = statusStr != nil ? HazardStatus(rawValue: statusStr!) : (isVerified ? .verifiedActive : .unverified)
+                    let peers = Int((fields["peerConfirmations"] as? [String: Any])?["integerValue"] as? String ?? "1") ?? 1
+                    let severity = (fields["severity"] as? [String: Any])?["stringValue"] as? String ?? "High"
+                    let assignedTeam = (fields["assignedTeam"] as? [String: Any])?["stringValue"] as? String
                     
                     let hazard = HazardReport(
                         id: docId,
@@ -231,7 +236,11 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                         reporterName: reporter,
                         reportedAt: Date(),
                         isVerified: isVerified,
-                        description: desc
+                        description: desc,
+                        status: status,
+                        peerConfirmations: peers,
+                        severity: severity,
+                        assignedTeam: assignedTeam
                     )
                     parsedHazards.append(hazard)
                 }
@@ -241,6 +250,45 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
                 }
             }
         }.resume()
+    }
+    
+    // MARK: - Update / Publish Hazard Report
+    public func publishHazardReport(hazard: HazardReport) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/hazard_reports/\(hazard.id)?key=\(apiKey)") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var fields: [String: Any] = [
+            "title": ["stringValue": hazard.title],
+            "category": ["stringValue": hazard.category],
+            "description": ["stringValue": hazard.description],
+            "reporterName": ["stringValue": hazard.reporterName],
+            "latitude": ["doubleValue": hazard.latitude],
+            "longitude": ["doubleValue": hazard.longitude],
+            "isVerified": ["booleanValue": hazard.status == .verifiedActive || hazard.status == .roadBlocked],
+            "status": ["stringValue": hazard.status.rawValue],
+            "peerConfirmations": ["integerValue": "\(hazard.peerConfirmations)"],
+            "severity": ["stringValue": hazard.severity],
+            "timestamp": ["integerValue": "\(Int(hazard.reportedAt.timeIntervalSince1970))"]
+        ]
+        
+        if let team = hazard.assignedTeam {
+            fields["assignedTeam"] = ["stringValue": team]
+        }
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: ["fields": fields]) else { return }
+        request.httpBody = jsonData
+        URLSession.shared.dataTask(with: request).resume()
+    }
+    
+    // MARK: - Delete Hazard Report
+    public func deleteHazardReport(id: String) {
+        guard let url = URL(string: "\(firestoreBaseUrl)/hazard_reports/\(id)?key=\(apiKey)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        URLSession.shared.dataTask(with: request).resume()
     }
     
     // MARK: - Broadcast Emergency Activation Order to Firestore

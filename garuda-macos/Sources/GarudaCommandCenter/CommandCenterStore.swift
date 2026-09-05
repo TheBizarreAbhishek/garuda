@@ -400,4 +400,60 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
         }
         FirebaseFirestoreClient.shared.deleteReliefShelter(id: id)
     }
+    
+    // MARK: - Hazard Reports Management
+    public func addHazard(_ hazard: HazardReport) {
+        withAnimation(.spring()) {
+            if let idx = hazards.firstIndex(where: { $0.id == hazard.id }) {
+                hazards[idx] = hazard
+            } else {
+                hazards.insert(hazard, at: 0)
+            }
+        }
+        FirebaseFirestoreClient.shared.publishHazardReport(hazard: hazard)
+    }
+    
+    public func updateHazardStatus(id: String, newStatus: HazardStatus, assignedTeam: String? = nil) {
+        withAnimation(.spring()) {
+            if let idx = hazards.firstIndex(where: { $0.id == id }) {
+                hazards[idx].status = newStatus
+                hazards[idx].isVerified = (newStatus == .verifiedActive || newStatus == .roadBlocked)
+                if let team = assignedTeam {
+                    hazards[idx].assignedTeam = team
+                }
+                
+                let updatedHazard = hazards[idx]
+                FirebaseFirestoreClient.shared.publishHazardReport(hazard: updatedHazard)
+                
+                // If road blocked, broadcast instant warning push notification to Citizen Apps
+                if newStatus == .roadBlocked {
+                    let notifTitle = "⛔ ROAD BLOCKED: \(updatedHazard.title)"
+                    let notifMsg = "NDRF Hazard Alert: Route impassable near \(String(format: "%.4f", updatedHazard.latitude))°N, \(String(format: "%.4f", updatedHazard.longitude))°E (\(updatedHazard.category)). Evacuees please reroute."
+                    FirebaseFirestoreClient.shared.publishNotification(
+                        title: notifTitle,
+                        message: notifMsg,
+                        priority: "CRITICAL",
+                        targetArea: "Evacuation Route Sector (10km)"
+                    )
+                    
+                    self.notifications.insert(
+                        PushNotificationRecord(
+                            title: notifTitle,
+                            message: notifMsg,
+                            targetArea: "Evacuation Route Sector (10km)",
+                            priority: "CRITICAL"
+                        ),
+                        at: 0
+                    )
+                }
+            }
+        }
+    }
+    
+    public func deleteHazard(id: String) {
+        withAnimation(.spring()) {
+            hazards.removeAll(where: { $0.id == id })
+        }
+        FirebaseFirestoreClient.shared.deleteHazardReport(id: id)
+    }
 }

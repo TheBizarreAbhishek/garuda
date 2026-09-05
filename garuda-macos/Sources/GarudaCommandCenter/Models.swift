@@ -141,6 +141,16 @@ public struct DisasterAlert: Identifiable, Codable, Hashable {
     }
 }
 
+public enum HazardStatus: String, Codable, CaseIterable, Identifiable {
+    case unverified = "Pending Review"
+    case roadBlocked = "Verified: Road Blocked"
+    case verifiedActive = "Verified Hazard"
+    case resolved = "Cleared / Resolved"
+    case falseAlarm = "Flagged False Alarm"
+    
+    public var id: String { rawValue }
+}
+
 public struct HazardReport: Identifiable, Codable, Hashable {
     public let id: String
     public var title: String
@@ -151,6 +161,10 @@ public struct HazardReport: Identifiable, Codable, Hashable {
     public var reportedAt: Date
     public var isVerified: Bool
     public var description: String
+    public var status: HazardStatus
+    public var peerConfirmations: Int
+    public var severity: String
+    public var assignedTeam: String?
     
     public var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -165,7 +179,11 @@ public struct HazardReport: Identifiable, Codable, Hashable {
         reporterName: String = "Citizen via BLE Mesh",
         reportedAt: Date = Date(),
         isVerified: Bool = false,
-        description: String = ""
+        description: String = "",
+        status: HazardStatus? = nil,
+        peerConfirmations: Int = 1,
+        severity: String = "High",
+        assignedTeam: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -176,6 +194,10 @@ public struct HazardReport: Identifiable, Codable, Hashable {
         self.reportedAt = reportedAt
         self.isVerified = isVerified
         self.description = description
+        self.status = status ?? (isVerified ? .verifiedActive : .unverified)
+        self.peerConfirmations = peerConfirmations
+        self.severity = severity
+        self.assignedTeam = assignedTeam
     }
 }
 
