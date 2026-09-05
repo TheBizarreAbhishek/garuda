@@ -154,6 +154,11 @@ class UplinkGatewayManager(
                     } else if (line.startsWith("data: ")) {
                         val dataJson = line.removePrefix("data: ")
                         try {
+                            if (currentEvent == "connected" || currentEvent == "heartbeat" || currentEvent == "ping") {
+                                Log.d(TAG, "Gateway SSE handshake established: $dataJson")
+                                continue
+                            }
+
                             if (currentEvent == "emergency_deactivated") {
                                 _connectionState.value = _connectionState.value.copy(
                                     isEmergencyActiveFromGov = false,
@@ -167,29 +172,34 @@ class UplinkGatewayManager(
                                 continue
                             }
 
-                            val json = JSONObject(dataJson)
-                            val title = json.optString("title", "GOVERNMENT BROADCAST")
-                            val message = json.optString("message", json.optString("instructions", "New directive received."))
-                            val targetArea = json.optString("targetArea", json.optString("district", "All Regions"))
-                            val priority = json.optString("priority", json.optString("severity", "HIGH"))
-                            val isEmergency = (currentEvent == "emergency_activated") || priority.contains("Critical", true)
+                            // Only process valid broadcast events
+                            if (currentEvent == "emergency_activated" || currentEvent == "push_notification") {
+                                val json = JSONObject(dataJson)
+                                val title = json.optString("title", "")
+                                val message = json.optString("message", json.optString("instructions", ""))
+                                val targetArea = json.optString("targetArea", json.optString("district", "All Regions"))
+                                val priority = json.optString("priority", json.optString("severity", "HIGH"))
+                                val isEmergency = (currentEvent == "emergency_activated") || priority.contains("Critical", true)
 
-                            _connectionState.value = _connectionState.value.copy(
-                                isEmergencyActiveFromGov = isEmergency,
-                                activeDistrictAlert = targetArea,
-                                alertHeadline = title,
-                                alertInstructions = "$priority: $message"
-                            )
+                                if (title.isNotEmpty() || message.isNotEmpty()) {
+                                    _connectionState.value = _connectionState.value.copy(
+                                        isEmergencyActiveFromGov = isEmergency,
+                                        activeDistrictAlert = targetArea,
+                                        alertHeadline = title,
+                                        alertInstructions = if (priority.isNotEmpty()) "$priority: $message" else message
+                                    )
 
-                            // Trigger real-time system notification on citizen phone (deduplicated automatically)
-                            if (context != null) {
-                                GarudaNotificationManager.showHeadsUpNotification(
-                                    context = context,
-                                    title = title,
-                                    message = message,
-                                    targetArea = targetArea,
-                                    isEmergency = isEmergency
-                                )
+                                    // Trigger real-time system notification on citizen phone
+                                    if (context != null) {
+                                        GarudaNotificationManager.showHeadsUpNotification(
+                                            context = context,
+                                            title = title.ifEmpty { "Government Alert" },
+                                            message = message.ifEmpty { "Emergency broadcast received." },
+                                            targetArea = targetArea,
+                                            isEmergency = isEmergency
+                                        )
+                                    }
+                                }
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error parsing SSE event: $e")
