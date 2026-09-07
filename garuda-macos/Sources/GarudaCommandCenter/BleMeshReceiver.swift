@@ -120,12 +120,12 @@ public final class BleMeshReceiver: NSObject, CBCentralManagerDelegate, @uncheck
         // Extract fields
         let packetType = packetBytes[2]
         
-        let packetId = packetBytes.withUnsafeBytes { $0.load(fromByteOffset: 3, as: UInt32.self).bigEndian }
-        let deviceHash = packetBytes.withUnsafeBytes { $0.load(fromByteOffset: 7, as: Int32.self).bigEndian }
-        let timestamp = packetBytes.withUnsafeBytes { $0.load(fromByteOffset: 11, as: UInt32.self).bigEndian }
+        let packetId = packetBytes.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 3, as: UInt32.self).bigEndian }
+        let deviceHash = packetBytes.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 7, as: Int32.self).bigEndian }
+        let timestamp = packetBytes.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 11, as: UInt32.self).bigEndian }
         
-        let latRaw = packetBytes.withUnsafeBytes { $0.load(fromByteOffset: 15, as: Int32.self).bigEndian }
-        let lonRaw = packetBytes.withUnsafeBytes { $0.load(fromByteOffset: 19, as: Int32.self).bigEndian }
+        let latRaw = packetBytes.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 15, as: Int32.self).bigEndian }
+        let lonRaw = packetBytes.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 19, as: Int32.self).bigEndian }
         
         let latitude = Double(latRaw) / Self.FIXED_POINT_SCALE
         let longitude = Double(lonRaw) / Self.FIXED_POINT_SCALE

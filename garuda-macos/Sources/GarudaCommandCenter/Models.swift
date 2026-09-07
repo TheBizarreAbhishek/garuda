@@ -216,11 +216,11 @@ public struct ConnectedDevice: Identifiable, Codable, Hashable, Sendable {
     public var hopCount: Int
     
     public var isDirectCloud: Bool {
-        connectionType.uppercased().contains("CLOUD") || 
-        connectionType.uppercased().contains("DIRECT") || 
-        connectionType.uppercased().contains("INTERNET") ||
-        meshRole.localizedCaseInsensitiveContains("Gateway") ||
-        hopCount == 0
+        let conn = connectionType.uppercased()
+        if conn.contains("BLE") || conn.contains("MESH") || conn.contains("RELAY") {
+            return false
+        }
+        return conn.contains("CLOUD") || conn.contains("INTERNET")
     }
     
     public var coordinate: CLLocationCoordinate2D? {

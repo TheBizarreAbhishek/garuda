@@ -1,6 +1,8 @@
 package com.project.garuda.network
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
 import com.project.garuda.hardware.DeviceHardwareManager
@@ -82,7 +84,23 @@ class FirebaseCloudGateway(
         }
     }
 
+    fun isNetworkConnected(): Boolean {
+        return try {
+            val cm = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+            val net = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(net) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private suspend fun sendDeviceHeartbeat() {
+        if (!isNetworkConnected()) {
+            _syncState.value = _syncState.value.copy(isConnected = false)
+            return
+        }
         try {
             val urlString = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/active_nodes/$deviceId?key=$API_KEY"
             val url = URL(urlString)
@@ -124,9 +142,15 @@ class FirebaseCloudGateway(
             writer.flush()
             writer.close()
 
-            connection.responseCode // execute request
+            val resp = connection.responseCode
+            if (resp in 200..299) {
+                _syncState.value = _syncState.value.copy(isConnected = true)
+            } else {
+                _syncState.value = _syncState.value.copy(isConnected = false)
+            }
         } catch (e: Exception) {
             Log.v(TAG, "Heartbeat note: ${e.message}")
+            _syncState.value = _syncState.value.copy(isConnected = false)
         }
     }
 
@@ -200,9 +224,12 @@ class FirebaseCloudGateway(
                     isConnected = true,
                     lastSyncTimestamp = System.currentTimeMillis()
                 )
+            } else {
+                _syncState.value = _syncState.value.copy(isConnected = false)
             }
         } catch (e: Exception) {
             Log.v(TAG, "Cloud poll note: ${e.message}")
+            _syncState.value = _syncState.value.copy(isConnected = false)
         }
     }
 
@@ -290,9 +317,9 @@ class FirebaseCloudGateway(
                 val fields = JSONObject().apply {
                     put("deviceId", JSONObject().put("stringValue", peerId))
                     put("deviceName", JSONObject().put("stringValue", "Mesh Node #${Math.abs(peerHash) % 9000 + 1000}"))
-                    put("status", JSONObject().put("stringValue", "ONLINE"))
-                    put("batteryLevel", JSONObject().put("integerValue", "0"))
-                    put("meshRole", JSONObject().put("stringValue", "Offline Field Survivor Node"))
+                    put("status", JSONObject().put("stringValue", "ONLINE (MESH)"))
+                    put("batteryLevel", JSONObject().put("integerValue", "$realBattery"))
+                    put("meshRole", JSONObject().put("stringValue", "Offline Field Mesh Node"))
                     put("lastSeen", JSONObject().put("integerValue", "${System.currentTimeMillis() / 1000}"))
                     put("location", JSONObject().put("stringValue", locName))
                     put("latitude", JSONObject().put("doubleValue", lat))

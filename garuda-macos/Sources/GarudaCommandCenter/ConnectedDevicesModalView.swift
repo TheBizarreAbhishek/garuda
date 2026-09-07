@@ -52,7 +52,7 @@ public struct ConnectedDevicesModalView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Connected Devices & Mesh Network Registry")
                             .font(.headline.bold())
-                        Text("Live Cloud & BLE Multi-Hop Ground Grid • Firebase (garuda-2aba2)")
+                        Text("Live Cloud & BLE Multi-Hop Ground Grid • Firebase (project-garuda-babf8)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

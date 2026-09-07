@@ -233,7 +233,8 @@ class CitizenViewModel(
 
                         // 🌐 EDGE GATEWAY RELAY TO CLOUD: If this phone has Internet, relay ONLY offline mesh peers (who do not have direct internet)
                         val isPeerDirectOnline = (packet.emergencyType == 0x7F.toByte())
-                        if (firebaseGateway.syncState.value.isConnected && 
+                        val hasInternet = firebaseGateway.isNetworkConnected()
+                        if (hasInternet && 
                             packet.deviceHash != 0 && 
                             packet.deviceHash != localDeviceHash && 
                             !isPeerDirectOnline) {
@@ -763,7 +764,7 @@ class CitizenViewModel(
         heartbeatJob = viewModelScope.launch {
             while (isActive) {
                 val nowEpoch = (System.currentTimeMillis() / 1000).toInt()
-                val isOnline = firebaseGateway.syncState.value.isConnected
+                val isOnline = firebaseGateway.isNetworkConnected()
                 val heartbeatPacket = GarudaPacket(
                     packetType = GarudaPacket.TYPE_HEARTBEAT,
                     packetId = Random.nextInt(10000, 99999),
