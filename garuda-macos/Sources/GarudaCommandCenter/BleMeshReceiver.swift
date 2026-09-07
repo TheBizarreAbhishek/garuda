@@ -97,7 +97,7 @@ public final class BleMeshReceiver: NSObject, CBCentralManagerDelegate, @uncheck
         // Followed by our 27-byte payload
         var payloadData: Data?
         
-        if data.count >= 29 {
+        if data.count >= 26 {
             let mfgId = UInt16(data[0]) | (UInt16(data[1]) << 8)
             let mfgIdBig = (UInt16(data[0]) << 8) | UInt16(data[1])
             if mfgId == Self.GARUDA_MANUFACTURER_ID || mfgIdBig == Self.GARUDA_MANUFACTURER_ID {
@@ -105,14 +105,14 @@ public final class BleMeshReceiver: NSObject, CBCentralManagerDelegate, @uncheck
             }
         }
         
-        if payloadData == nil && data.count >= 27 {
+        if payloadData == nil && data.count >= 24 {
             // Check if first 2 bytes are 0x47 0x44 directly
             if data[0] == 0x47 && data[1] == 0x44 {
                 payloadData = data
             }
         }
         
-        guard let packetBytes = payloadData, packetBytes.count >= 27 else { return }
+        guard let packetBytes = payloadData, packetBytes.count >= 24 else { return }
         
         // Validate Header (0x47, 0x44)
         guard packetBytes[0] == 0x47 && packetBytes[1] == 0x44 else { return }
@@ -131,7 +131,7 @@ public final class BleMeshReceiver: NSObject, CBCentralManagerDelegate, @uncheck
         let longitude = Double(lonRaw) / Self.FIXED_POINT_SCALE
         
         let emergencyTypeCode = packetBytes[23]
-        let hopAndTtl = packetBytes[24]
+        let hopAndTtl = packetBytes.count > 24 ? packetBytes[24] : 0
         let hopCount = Int(hopAndTtl & 0x0F)
         
         let nodeName = peripheralName ?? "Mesh Node #\(abs(deviceHash) % 9000 + 1000)"

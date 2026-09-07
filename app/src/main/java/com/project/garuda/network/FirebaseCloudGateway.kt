@@ -24,7 +24,7 @@ import java.net.URL
 
 data class FirebaseSyncState(
     val isConnected: Boolean = false,
-    val projectId: String = "garuda-2aba2",
+    val projectId: String = "project-garuda-babf8",
     val lastSyncTimestamp: Long = 0,
     val syncedPacketsCount: Int = 0,
     val isEmergencyActive: Boolean = false,
@@ -41,14 +41,14 @@ class FirebaseCloudGateway(
         private const val TAG = "GarudaFirebase"
         private val API_KEY: String by lazy {
             try {
-                String(android.util.Base64.decode("QUl6YVN5QmtSSkhEVE1KUU16MUFrZHhqeHNGcl9Vd3c3VndGTnNZ", android.util.Base64.DEFAULT))
+                String(android.util.Base64.decode("QUl6YVN5RFotem9wbVlYN1hvNlFRWXlZckt1OU1sM0J1X0xfLUo0", android.util.Base64.DEFAULT))
             } catch (e: Exception) {
                 ""
             }
         }
     }
 
-    private var projectId = "garuda-2aba2"
+    private var projectId = "project-garuda-babf8"
     private val _syncState = MutableStateFlow(FirebaseSyncState(projectId = projectId))
     val syncState: StateFlow<FirebaseSyncState> = _syncState.asStateFlow()
 

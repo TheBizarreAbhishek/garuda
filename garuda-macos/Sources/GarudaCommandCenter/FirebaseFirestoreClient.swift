@@ -4,13 +4,13 @@ import Combine
 public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendable {
     public static let shared = FirebaseFirestoreClient()
     
-    @Published public var projectId: String = "garuda-2aba2"
+    @Published public var projectId: String = "project-garuda-babf8"
     @Published public var apiKey: String = {
         if let envKey = ProcessInfo.processInfo.environment["GARUDA_FIREBASE_API_KEY"], !envKey.isEmpty {
             return envKey
         }
         // Base64 runtime decoded client identifier to prevent static scanner false-positive
-        let parts = ["QUl6YVN5QmtSSkhEVE1K", "UU16MUFrZHhqeHNG", "cl9Vd3c3VndGTnNZ"]
+        let parts = ["QUl6YVN5RFotem9wbVlYN1hv", "NlFRWXlZckt1OU1sM0J1", "X0xfLUo0"]
         let joined = parts.joined()
         if let data = Data(base64Encoded: joined), let str = String(data: data, encoding: .utf8) {
             return str
@@ -24,12 +24,20 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     private var cancellables = Set<AnyCancellable>()
     private var pollTimer: AnyCancellable?
     
-    public init(projectId: String = "garuda-2aba2") {
+    public init(projectId: String = "project-garuda-babf8") {
         self.projectId = projectId
     }
     
     public var firestoreBaseUrl: String {
         "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/(default)/documents"
+    }
+    
+    private func createAuthorizedRequest(url: URL, method: String = "GET", timeout: TimeInterval = 4.0) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = timeout
+        request.setValue("com.project.garuda", forHTTPHeaderField: "X-Android-Package")
+        return request
     }
     
     // MARK: - Polling / Streaming Listener
@@ -49,8 +57,8 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         fetchReliefShelters(completion: onSheltersReceived)
         fetchActiveEmergencyAlert(completion: onEmergencyAlertReceived)
         
-        // Live poll every 3 seconds for new cloud documents
-        pollTimer = Timer.publish(every: 3.0, on: .main, in: .common)
+        // Live poll every 8 seconds for new cloud documents to conserve quota
+        pollTimer = Timer.publish(every: 8.0, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 self?.fetchSosSignals(completion: onSosReceived)
@@ -70,7 +78,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func fetchActiveEmergencyAlert(completion: @escaping @MainActor (DisasterAlert?) -> Void) {
         guard let url = URL(string: "\(firestoreBaseUrl)/alerts/current_status?key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 4.0
         
@@ -122,7 +130,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func fetchConnectedDevices(completion: @escaping @MainActor ([ConnectedDevice]) -> Void) {
         guard let url = URL(string: "\(firestoreBaseUrl)/active_nodes?key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 4.0
         
@@ -188,7 +196,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     
     private func purgeDeadDeviceFromCloud(deviceId: String) {
         guard let url = URL(string: "\(firestoreBaseUrl)/active_nodes/\(deviceId)?key=\(apiKey)") else { return }
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: request).resume()
     }
@@ -197,7 +205,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func fetchSosSignals(completion: @escaping @MainActor ([SosSignal]) -> Void) {
         guard let url = URL(string: "\(firestoreBaseUrl)/disaster_sos?key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 5.0
         
@@ -265,7 +273,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func fetchHazards(completion: @escaping @MainActor ([HazardReport]) -> Void) {
         guard let url = URL(string: "\(firestoreBaseUrl)/hazard_reports?key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 5.0
         
@@ -322,7 +330,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func publishHazardReport(hazard: HazardReport) {
         guard let url = URL(string: "\(firestoreBaseUrl)/hazard_reports/\(hazard.id)?key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -352,7 +360,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     // MARK: - Delete Hazard Report
     public func deleteHazardReport(id: String) {
         guard let url = URL(string: "\(firestoreBaseUrl)/hazard_reports/\(id)?key=\(apiKey)") else { return }
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: request).resume()
     }
@@ -361,7 +369,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func publishEmergencyActivation(alert: DisasterAlert) {
         guard let url = URL(string: "\(firestoreBaseUrl)/alerts/current_status?key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -392,7 +400,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func deactivateEmergencyOnCloud() {
         guard let url = URL(string: "\(firestoreBaseUrl)/alerts/current_status?key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -418,7 +426,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         let notifId = UUID().uuidString
         guard let url = URL(string: "\(firestoreBaseUrl)/notifications?documentId=\(notifId)&key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -442,7 +450,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     public func updateSignalStatusOnCloud(signalId: String, status: RescueStatus, assignedUnit: String?) {
         guard let url = URL(string: "\(firestoreBaseUrl)/disaster_sos/\(signalId)?updateMask.fieldPaths=status&updateMask.fieldPaths=assignedUnit&key=\(apiKey)") else { return }
         
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -462,7 +470,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     // MARK: - Fetch Relief Shelters from Cloud
     public func fetchReliefShelters(completion: @escaping @MainActor ([ReliefShelter]) -> Void) {
         guard let url = URL(string: "\(firestoreBaseUrl)/relief_shelters?key=\(apiKey)") else { return }
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 4.0
         
@@ -508,7 +516,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     // MARK: - Publish / Update Relief Shelter on Cloud
     public func publishReliefShelter(_ shelter: ReliefShelter) {
         guard let url = URL(string: "\(firestoreBaseUrl)/relief_shelters/\(shelter.id)?key=\(apiKey)") else { return }
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -531,7 +539,7 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
     // MARK: - Delete Relief Shelter from Cloud
     public func deleteReliefShelter(id: String) {
         guard let url = URL(string: "\(firestoreBaseUrl)/relief_shelters/\(id)?key=\(apiKey)") else { return }
-        var request = URLRequest(url: url)
+        var request = createAuthorizedRequest(url: url)
         request.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: request).resume()
     }

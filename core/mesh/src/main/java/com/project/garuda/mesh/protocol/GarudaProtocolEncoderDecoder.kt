@@ -69,7 +69,7 @@ object GarudaProtocolEncoderDecoder {
      * Returns null if magic bytes don't match or CRC16 checksum validation fails.
      */
     fun decode(bytes: ByteArray): GarudaPacket? {
-        if (bytes.size < GarudaPacket.LEGACY_FRAME_SIZE) {
+        if (bytes.size < 24) {
             return null
         }
 
@@ -82,13 +82,16 @@ object GarudaProtocolEncoderDecoder {
             return null
         }
 
-        // Validate CRC16 Checksum
-        val dataLength = bytes.size - 2
-        val expectedChecksum = calculateCrc16(bytes.copyOf(dataLength))
-        val actualChecksum = ByteBuffer.wrap(bytes, dataLength, 2).order(ByteOrder.BIG_ENDIAN).short
+        // Validate CRC16 Checksum if full legacy 27+ byte frame is present
+        var actualChecksum: Short = 0
+        if (bytes.size >= 27) {
+            val dataLength = bytes.size - 2
+            val expectedChecksum = calculateCrc16(bytes.copyOf(dataLength))
+            actualChecksum = ByteBuffer.wrap(bytes, dataLength, 2).order(ByteOrder.BIG_ENDIAN).short
 
-        if (expectedChecksum != actualChecksum) {
-            return null
+            if (expectedChecksum != actualChecksum) {
+                return null
+            }
         }
 
         // 2. PacketType (1 byte)
@@ -114,14 +117,21 @@ object GarudaProtocolEncoderDecoder {
         // 8. EmergencyType (1 byte)
         val emergencyType = buffer.get()
 
-        // 9. HopAndTtl (1 byte)
-        val hopAndTtl = buffer.get().toInt()
-        val hopCount = hopAndTtl and 0x0F
-        val ttl = (hopAndTtl shl 28 ushr 28 and 0xF0 ushr 4) or ((hopAndTtl ushr 4) and 0x0F)
+        // 9. HopAndTtl (1 byte if available, else default)
+        val hopCount: Int
+        val ttl: Int
+        if (buffer.remaining() >= 1) {
+            val hopAndTtl = buffer.get().toInt()
+            hopCount = hopAndTtl and 0x0F
+            ttl = (hopAndTtl shl 28 ushr 28 and 0xF0 ushr 4) or ((hopAndTtl ushr 4) and 0x0F)
+        } else {
+            hopCount = 0
+            ttl = 5
+        }
 
         // 10. Extended Payload (if any)
-        val payloadSize = dataLength - (GarudaPacket.LEGACY_FRAME_SIZE - 2)
-        val payload = if (payloadSize > 0) {
+        val payloadSize = if (bytes.size >= 27) (bytes.size - 2) - (GarudaPacket.LEGACY_FRAME_SIZE - 2) else 0
+        val payload = if (payloadSize > 0 && buffer.remaining() >= payloadSize) {
             ByteArray(payloadSize).also { buffer.get(it) }
         } else {
             byteArrayOf()
