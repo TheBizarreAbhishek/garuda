@@ -110,8 +110,13 @@ class CitizenViewModel(
                             )
                         }
                     }
-                } else if (!connState.isEmergencyActiveFromGov && _uiState.value.isGovernmentAlertDialogOpen) {
-                    _uiState.update { it.copy(isGovernmentAlertDialogOpen = false) }
+                } else if (!connState.isEmergencyActiveFromGov) {
+                    _uiState.update {
+                        it.copy(
+                            isGovernmentAlertDialogOpen = false,
+                            pendingGovAlert = null
+                        )
+                    }
                 }
             }
         }
@@ -337,8 +342,13 @@ class CitizenViewModel(
                     } else {
                         Log.v(TAG, "ℹ️ Alert for '$targetZone' does not match device location '$currentLoc'. Remaining in Standby.")
                     }
-                } else if (!syncState.isEmergencyActive && _uiState.value.isGovernmentAlertDialogOpen) {
-                    _uiState.update { it.copy(isGovernmentAlertDialogOpen = false) }
+                } else if (!syncState.isEmergencyActive) {
+                    _uiState.update {
+                        it.copy(
+                            isGovernmentAlertDialogOpen = false,
+                            pendingGovAlert = null
+                        )
+                    }
                 }
             }
         }

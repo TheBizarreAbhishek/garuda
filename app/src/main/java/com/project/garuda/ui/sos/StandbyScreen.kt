@@ -53,6 +53,7 @@ import com.project.garuda.ui.theme.AmoledBlack
 
 import com.project.garuda.ui.theme.BorderSubtle
 import com.project.garuda.ui.theme.EmergencyBloodRed
+import com.project.garuda.ui.theme.EmergencyRedContainer
 import com.project.garuda.ui.theme.GarudaTheme
 import com.project.garuda.ui.theme.SafeGreen
 import com.project.garuda.ui.theme.SafeGreenContainer
@@ -109,16 +110,22 @@ fun StandbyScreen(
                     )
                 }
 
-                // Status Badge: Real-time Live BLE Mesh Peer Count
+                // Status Badge: Real-time Live BLE Mesh & Emergency/Standby Mode Status
+                val isGovEmergencyDeclared = state.pendingGovAlert != null
                 val peerCount = state.meshStatus.peersNearby
-                val peerColor = if (peerCount > 0) SafeGreen else AmberAlert
-                val peerContainer = if (peerCount > 0) SafeGreenContainer else AmberAlertContainer
+                val peerColor = if (isGovEmergencyDeclared) EmergencyBloodRed else SafeGreen
+                val peerContainer = if (isGovEmergencyDeclared) EmergencyRedContainer else SafeGreenContainer
+                val badgeText = if (isGovEmergencyDeclared) {
+                    if (peerCount > 0) "Emergency ($peerCount Peers)" else "Emergency (0 Peer)"
+                } else {
+                    "Standby Mode"
+                }
 
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .background(peerContainer)
-                        .border(1.dp, peerColor, RoundedCornerShape(20.dp))
+                        .border(1.dp, peerColor.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -130,7 +137,7 @@ fun StandbyScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (peerCount > 0) "Peers: $peerCount" else "Mesh Active (0 Peer)",
+                            text = badgeText,
                             color = peerColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold

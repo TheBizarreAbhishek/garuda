@@ -77,35 +77,38 @@ public final class FirebaseFirestoreClient: ObservableObject, @unchecked Sendabl
         URLSession.shared.dataTask(with: request) { data, response, error in
             guard let data = data, error == nil else { return }
             
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let fields = json["fields"] as? [String: Any] {
-                
-                let isEmergency = (fields["isEmergencyActive"] as? [String: Any])?["booleanValue"] as? Bool ?? false
-                let title = (fields["title"] as? [String: Any])?["stringValue"] as? String ?? "Government Emergency Alert"
-                let severity = (fields["severity"] as? [String: Any])?["stringValue"] as? String ?? "Level 3 - Critical / Red Alert"
-                let district = (fields["targetDistrict"] as? [String: Any])?["stringValue"] as? String ?? "All Regions"
-                let instructions = (fields["instructions"] as? [String: Any])?["stringValue"] as? String ?? "Follow safety instructions."
-                let timestampEpoch = Double((fields["timestamp"] as? [String: Any])?["integerValue"] as? String ?? "")
-                    ?? Double((fields["timestamp"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0)
-                let timestamp = timestampEpoch > 0 ? Date(timeIntervalSince1970: timestampEpoch) : Date()
-                
-                if isEmergency {
-                    let alert = DisasterAlert(
-                        id: "current_status",
-                        title: title,
-                        severity: severity,
-                        targetDistrict: district,
-                        instructions: instructions,
-                        timestamp: timestamp,
-                        isEmergencyActive: true
-                    )
-                    Task { @MainActor in
-                        completion(alert)
-                    }
-                } else {
-                    Task { @MainActor in
-                        completion(nil)
-                    }
+            // Ignore HTTP errors (like 429 quota exceeded or 500) so local state isn't wiped
+            if let httpResp = response as? HTTPURLResponse, httpResp.statusCode != 200 {
+                return
+            }
+            
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  json["error"] == nil,
+                  let fields = json["fields"] as? [String: Any] else {
+                return
+            }
+            
+            let isEmergency = (fields["isEmergencyActive"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+            let title = (fields["title"] as? [String: Any])?["stringValue"] as? String ?? "Government Emergency Alert"
+            let severity = (fields["severity"] as? [String: Any])?["stringValue"] as? String ?? "Level 3 - Critical / Red Alert"
+            let district = (fields["targetDistrict"] as? [String: Any])?["stringValue"] as? String ?? "All Regions"
+            let instructions = (fields["instructions"] as? [String: Any])?["stringValue"] as? String ?? "Follow safety instructions."
+            let timestampEpoch = Double((fields["timestamp"] as? [String: Any])?["integerValue"] as? String ?? "")
+                ?? Double((fields["timestamp"] as? [String: Any])?["doubleValue"] as? Double ?? 0.0)
+            let timestamp = timestampEpoch > 0 ? Date(timeIntervalSince1970: timestampEpoch) : Date()
+            
+            if isEmergency {
+                let alert = DisasterAlert(
+                    id: "current_status",
+                    title: title,
+                    severity: severity,
+                    targetDistrict: district,
+                    instructions: instructions,
+                    timestamp: timestamp,
+                    isEmergencyActive: true
+                )
+                Task { @MainActor in
+                    completion(alert)
                 }
             } else {
                 Task { @MainActor in

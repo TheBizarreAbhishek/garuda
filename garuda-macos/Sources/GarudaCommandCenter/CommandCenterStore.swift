@@ -98,9 +98,9 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                 }
             }
         } onEmergencyAlertReceived: { [weak self] cloudAlert in
-            guard let self = self else { return }
+            guard let self = self, let alert = cloudAlert else { return }
             withAnimation(.easeInOut) {
-                if let alert = cloudAlert, alert.isEmergencyActive {
+                if alert.isEmergencyActive {
                     // Split multiple target districts if semicolon-separated
                     let districtNames = alert.targetDistrict.contains(";")
                         ? alert.targetDistrict.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -128,13 +128,6 @@ public final class CommandCenterStore: ObservableObject, CommandGridServerDelega
                     self.alerts = updatedAlerts
                     self.isEmergencyBroadcastActive = true
                     self.activeDistrict = alert.targetDistrict
-                } else if cloudAlert == nil {
-                    // Cloud confirms standby mode
-                    if self.isEmergencyBroadcastActive {
-                        self.isEmergencyBroadcastActive = false
-                        self.activeDistrict = "All Regions (Standby)"
-                        self.alerts.removeAll()
-                    }
                 }
             }
         }
